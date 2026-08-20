@@ -1,0 +1,11 @@
+# Restos del intento descartado (Next.js/Vercel) — no se sube al repo.
+_descartado_nextjs/
+
+# Nunca subir tokens/credenciales.
+.env
+.env.local
+*.env
+hubspot.env
+
+# Node (por si en algún momento se usa algo con dependencias)
+node_modules/

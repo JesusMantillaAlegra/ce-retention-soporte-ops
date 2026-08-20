@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard · Soporte — Alegra</title>
+<style>body{visibility:hidden}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lexend:wght@600;700;800&display=swap" rel="stylesheet">
@@ -69,9 +70,6 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .nav-item:hover { background: #F5F7FA; }
 .nav-item.active { background: var(--teal-lt); color: var(--teal-dk); }
 .nav-item.active small { color: var(--teal-dk); opacity: .75; }
-.nav-item.disabled { color: #B6C0CC; cursor: not-allowed; }
-.nav-item.disabled small { color: #C9D1DA; }
-.nav-item.disabled:hover { background: none; }
 
 /* Main layout */
 .main { max-width: 1368px; margin: 0; padding: 32px 32px 60px; flex: 1; min-width: 0; }
@@ -96,13 +94,10 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .kpi-value.v-green  { color: #059669; }
 .kpi-value.v-red    { color: #DC2626; }
 .kpi-value.v-amber  { color: #D97706; }
-.kpi-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 500; margin-top: 8px; width: fit-content; color: var(--slate-lt); }
-.kpi-delta.up   { color: #16A34A; font-weight: 600; }
-.kpi-delta.down { color: #DC2626; font-weight: 600; }
-.kpi-delta.neu  { color: var(--slate-lt); }
 .kpi-note { font-size: 10.5px; color: var(--slate-lt); margin-top: 8px; line-height: 1.4; }
-.kpi-pill { display:inline-flex; align-items:center; font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; margin-top: 8px; width: fit-content; }
-.kpi-pill.warn { background:#FEF3C7; color:#92400E; }
+.kpi-source { display:inline-flex; align-items:center; gap:4px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; margin-top: 8px; width: fit-content; }
+.kpi-source.hubspot { background:#DBEAFE; color:#1D4ED8; }
+.kpi-source.metabase { background:#F1F5F9; color:#4A5568; }
 
 /* Grids */
 .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
@@ -133,7 +128,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .badge-green  { background: #DCFCE7; color: #166534; }
 .badge-red    { background: #FEE2E2; color: #991B1B; }
-.badge-amber  { background: #FEF3C7; color: #92400E; }
 .badge-gray   { background: #F1F5F9; color: #4A5568; }
 
 /* Info note / callout */
@@ -144,6 +138,10 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 
 /* Footer */
 .footer { text-align: center; padding: 24px; font-size: 11px; color: var(--slate-lt); border-top: 1px solid var(--border); margin-top: 12px; }
+
+.fallback { max-width: 560px; margin: 80px auto; text-align: center; font-size: 13px; color: var(--slate); }
+.fallback h2 { font-family: var(--font-head); margin-bottom: 10px; color: var(--dark); }
+.fallback code { background: #F1F5F9; padding: 2px 6px; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -156,9 +154,9 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     <span class="header-module">Soporte · Métricas Operativas</span>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
-    <span class="header-time">Período: 01-may — 11-ago-2026</span>
+    <span class="header-time" id="lastUpdated"></span>
     <span class="header-badge">Borrador</span>
-    <button class="btn-header" onclick="location.reload()"><i data-lucide="refresh-cw"></i>Actualizar</button>
+    <button class="btn-header" id="btnActualizar"><i data-lucide="refresh-cw"></i>Actualizar</button>
   </div>
 </header>
 
@@ -169,62 +167,24 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     </div>
     <nav class="sidebar-nav">
       <a class="nav-item active"><i data-lucide="headset"></i><span>Soporte<small>Reopen · FCR · Cierre</small></span></a>
-      <a class="nav-item disabled"><i data-lucide="bot"></i><span>Bots de Lucía<small>Próximamente</small></span></a>
-      <a class="nav-item disabled"><i data-lucide="bar-chart-2"></i><span>CSAT / SLA / Demanda<small>Próximamente</small></span></a>
     </nav>
   </aside>
 
-<main class="main">
+<main class="main" id="ce-main">
 
   <!-- ── SECCIÓN 1: KPIs ── -->
-  <div class="section-label">Sprint CE-Retention — Data (05-ago-2026)</div>
+  <div class="section-label">Sprint CE-Retention — Data</div>
   <div class="section-title">Métricas operativas de soporte</div>
-  <div class="section-sub">Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Fuente: HubSpot CRM (tickets) + Metabase (bi_ce_interactions)</div>
+  <div class="section-sub" id="periodoSub">Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Fuente: HubSpot CRM (tickets) + Metabase (bi_ce_interactions)</div>
 
-  <div class="kpi-strip">
-    <div class="kpi-card">
-      <div class="kpi-icon-lucide"><i data-lucide="inbox"></i></div>
-      <div class="kpi-label">Volumen de tickets</div>
-      <div class="kpi-value v-dark">95,978</div>
-      <div class="kpi-delta down"><i data-lucide="trending-down" style="width:12px;height:12px"></i>tendencia semanal a la baja</div>
-      <div class="kpi-note">Total creados en el período, canal ticket.</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-icon-lucide"><i data-lucide="clock"></i></div>
-      <div class="kpi-label">Tiempo de cierre promedio</div>
-      <div class="kpi-value v-teal">44.7 h</div>
-      <div class="kpi-delta up"><i data-lucide="trending-down" style="width:12px;height:12px"></i>de 91h (abr) a 21h (jul)</div>
-      <div class="kpi-note">Excluye últimas 2 semanas (dato censurado).</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-icon-lucide"><i data-lucide="repeat"></i></div>
-      <div class="kpi-label">Reopen rate</div>
-      <div class="kpi-value v-amber">2.49%</div>
-      <div class="kpi-delta neu">2,391 de 95,978 tickets</div>
-      <div class="kpi-note">Campo nativo HubSpot (hs_ticket_reopened_at).</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-icon-lucide"><i data-lucide="target"></i></div>
-      <div class="kpi-label">FCR (1er contacto)</div>
-      <div class="kpi-value v-red">N/D</div>
-      <div class="kpi-pill warn">Sin datos recientes</div>
-      <div class="kpi-note">0 de 30 tickets con flag poblado desde mayo. Validar con Agustín.</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-icon-lucide"><i data-lucide="smile"></i></div>
-      <div class="kpi-label">CSAT (Promoter)</div>
-      <div class="kpi-value v-green">94.7%</div>
-      <div class="kpi-delta neu">Cobertura: 6.5% de tickets</div>
-      <div class="kpi-note">5,926 Promoter / 88 Passive / 242 Detractor.</div>
-    </div>
-  </div>
+  <div class="kpi-strip" id="kpiStrip"></div>
 
   <hr class="section-divider">
 
   <!-- ── SECCIÓN 2: TENDENCIA ── -->
   <div class="section-label">Evolución</div>
   <div class="section-title">¿Cómo se ha movido la demanda y el tiempo de cierre?</div>
-  <div class="section-sub">Semanas grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
+  <div class="section-sub">Fuente: Metabase (snapshot manual) · Semanas grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
 
   <div class="chart-grid-3" style="margin-bottom:0">
     <div class="chart-card">
@@ -234,7 +194,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     </div>
     <div class="chart-card">
       <div class="chart-card-title">Distribución CSAT</div>
-      <div class="chart-card-sub">De los tickets con encuesta respondida (6,256)</div>
+      <div class="chart-card-sub" id="csatSub"></div>
       <div class="chart-wrap"><canvas id="chartCsat"></canvas></div>
     </div>
   </div>
@@ -244,34 +204,25 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <!-- ── SECCIÓN 3: PAÍS ── -->
   <div class="section-label">Corte geográfico</div>
   <div class="section-title">Tiempo de cierre por país</div>
-  <div class="section-sub">Solo países identificados (11.4% del total; 88.6% sin país asignado)</div>
+  <div class="section-sub">Volumen por país: HubSpot · Horas de cierre: Metabase (snapshot manual)</div>
 
   <div class="chart-grid-2" style="margin-bottom:20px">
     <div class="chart-card">
       <div class="chart-card-title">Horas promedio hasta cierre</div>
-      <div class="chart-card-sub">Por país, período completo</div>
+      <div class="chart-card-sub">Por país (snapshot Metabase)</div>
       <div class="chart-wrap"><canvas id="chartCountry"></canvas></div>
     </div>
     <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
       <div class="table-header">
         <div>
           <h3>Detalle por país</h3>
-          <div class="table-header-sub">Volumen y tiempo de cierre promedio</div>
+          <div class="table-header-sub">Tickets: HubSpot · Cierre prom.: Metabase</div>
         </div>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr><th>País</th><th>Tickets</th><th>% del total</th><th>Cierre prom.</th></tr></thead>
-          <tbody>
-            <tr><td><span class="badge badge-gray">Sin país</span></td><td>85,049</td><td>88.6%</td><td>39.5 h</td></tr>
-            <tr><td>Colombia</td><td>8,221</td><td>8.6%</td><td>74.0 h</td></tr>
-            <tr><td>Rep. Dominicana</td><td>713</td><td>0.7%</td><td>54.7 h</td></tr>
-            <tr><td>México</td><td>704</td><td>0.7%</td><td>71.0 h</td></tr>
-            <tr><td>Costa Rica</td><td>492</td><td>0.5%</td><td><span class="badge badge-red">98.6 h</span></td></tr>
-            <tr><td>Argentina</td><td>54</td><td>0.1%</td><td>29.0 h</td></tr>
-            <tr><td>Panamá</td><td>42</td><td>0.0%</td><td><span class="badge badge-green">12.8 h</span></td></tr>
-            <tr><td>Perú</td><td>20</td><td>0.0%</td><td><span class="badge badge-green">0.2 h</span></td></tr>
-          </tbody>
+          <tbody id="paisTableBody"></tbody>
         </table>
       </div>
     </div>
@@ -283,77 +234,195 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <div class="callout-card">
     <div class="chart-card-title"><i data-lucide="alert-triangle" style="width:15px;height:15px;color:#D97706"></i>Notas de calidad de dato — leer antes de reportar estos números</div>
     <div class="info-note" style="margin-top:10px">
-      <b>1) FCR</b> no tiene datos poblados desde mayo — confirmar con Agustín si se dejó de instrumentar o hay que migrar a otro campo/proceso.<br><br>
+      <b>1) FCR es un proxy, no el campo oficial.</b> El campo nativo `hs_is_one_touch_ticket` sigue sin registrar datos desde mayo. El KPI se calcula con `hs_num_times_contacted = 1` sobre tickets cerrados — razonable, pero no es 100% equivalente a "resuelto en el primer contacto"; confirmar con Agustín si se adopta como métrica oficial mientras se reactiva el campo real.<br><br>
       <b>2) Reopen</b> usa la definición nativa de HubSpot (fecha de reapertura), no una ventana de negocio (ej. "mismo cliente en 7 días"). Si el equipo quiere esa definición más estricta, hay que calcularla aparte.<br><br>
       <b>3) 88.6% de los tickets no tiene país asignado</b> — el corte geográfico solo es representativo del 11.4% restante. Vale la pena escalarlo como gap de instrumentación.<br><br>
-      <b>4) CSAT</b> tiene muy baja tasa de respuesta en este período (6.5%) — el 94.7% de Promoter no es representativo del total, solo de quienes respondieron.<br><br>
-      <b>5) Censura de datos:</b> las últimas 2 semanas del gráfico de cierre están incompletas — como los tickets acaban de crearse, muchos aún no cierran, lo que infla artificialmente la "mejora".
+      <b>4) CSAT</b> tiene muy baja tasa de respuesta en este período — no representativo del total, solo de quienes respondieron. Es un snapshot manual de Metabase, pendiente de refrescar.<br><br>
+      <b>5) Limpieza de ruido:</b> volumen, reopen y FCR excluyen ~7,900 tickets de rebote (`mailer-daemon@amazonses.com`, ver caso REVOPS-1324) — ese volumen sigue activo y creciendo, se reporta aparte.<br><br>
+      <b>6) Datos en vivo vs. manuales:</b> volumen, reopen, FCR y tickets-por-país vienen de HubSpot y se regeneran corriendo <code>sync_hubspot.mjs</code> (ver INSTRUCTIVO.md). Tiempo de cierre, CSAT y horas de cierre por país vienen de Metabase y se actualizan a mano.
     </div>
   </div>
 
 </main>
 </div>
 
-<div class="footer">Alegra — Métricas Operativas de Soporte · HubSpot CRM + bi_ce_interactions (Redshift) · Borrador manual, próxima versión automatizada semanalmente vía MCP local</div>
+<div class="fallback" id="fallback" style="display:none;">
+  <h2>No se pudo cargar los datos</h2>
+  <p>Verifica que <code>ce_retention_dashboard_data.js</code> (o <code>ce_retention_dashboard_data.json</code>) esté en la misma carpeta que este archivo.</p>
+</div>
 
+<div class="footer">Alegra — Métricas Operativas de Soporte · HubSpot CRM + bi_ce_interactions (Redshift) · index.html no cambia, solo se regeneran los datos</div>
+
+<script src="./ce_retention_dashboard_data.js"></script>
 <script>
-if (typeof lucide !== 'undefined') lucide.createIcons();
+(function () {
+  document.body.style.visibility = 'visible';
+})();
 
-Chart.defaults.animation = false;
-Chart.defaults.color = '#718096';
-Chart.defaults.borderColor = '#E2E8F0';
-Chart.defaults.font.family = "'Inter', sans-serif";
+document.getElementById('btnActualizar')?.addEventListener('click', () => location.reload());
 
-const weeks = ["26-abr","03-may","10-may","17-may","24-may","31-may","07-jun","14-jun","21-jun","28-jun","05-jul","12-jul","19-jul","26-jul","02-ago*","09-ago*"];
-const volumes = [753,8421,8289,5976,7392,7346,6437,5733,5843,6304,6990,5914,5872,7756,6147,128];
-const closeHours = [91.5,50.3,55.2,59.0,50.2,53.3,47.4,48.6,42.2,43.6,35.8,35.8,31.1,21.4,9.5,0.3];
-const barColors = volumes.map((_,i)=> i>=14 ? '#CBD5E1' : '#00BFA5');
+try {
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.animation = false;
+    Chart.defaults.color = '#718096';
+    Chart.defaults.borderColor = '#E2E8F0';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+  } else {
+    console.warn('Chart.js no cargó (revisa conexión / bloqueador de anuncios). Los gráficos no se mostrarán, el resto del dashboard sí.');
+  }
+} catch (e) { console.error('Error inicializando Chart.js:', e); }
 
-new Chart(document.getElementById('chartWeekly'), {
-  data: {
-    labels: weeks,
-    datasets: [
-      { type:'bar', label:'Tickets creados', data: volumes, backgroundColor: barColors, yAxisID:'y', borderRadius:4, maxBarThickness: 22 },
-      { type:'line', label:'Horas prom. hasta cierre', data: closeHours, borderColor:'#1A2B4A', backgroundColor:'#1A2B4A', yAxisID:'y1', tension:0.3, pointRadius:3, borderWidth:2 }
-    ]
-  },
-  options: {
-    responsive:true, maintainAspectRatio:false,
-    interaction:{mode:'index',intersect:false},
-    scales:{
-      y:{position:'left',grid:{color:'#F0F4F8'},title:{display:true,text:'Tickets',font:{size:10}}},
-      y1:{position:'right',grid:{display:false},title:{display:true,text:'Horas',font:{size:10}}},
-      x:{grid:{display:false}}
+const fmt = n => typeof n === 'number' ? n.toLocaleString('es-CO') : (n ?? '—');
+
+function runRender(data) {
+  try {
+    render(data);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  } catch (e) {
+    console.error('Error en render():', e);
+    document.getElementById('ce-main').style.display = 'none';
+    document.getElementById('fallback').innerHTML = `<h2>Error al renderizar</h2><p><code>${e.message}</code></p>`;
+    document.getElementById('fallback').style.display = 'block';
+  }
+}
+
+// Igual que el dashboard de Lucía: se abre con doble clic (file://), y Chrome
+// bloquea fetch() de archivos locales por CORS. Por eso el dato principal se
+// carga como <script src="./ce_retention_dashboard_data.js"> (window.CE_RETENTION_DATA),
+// que sí funciona desde file://. Si ese archivo no está, se intenta fetch() del
+// JSON como respaldo (útil si esto algún día se sirve desde un servidor real).
+if (typeof window.CE_RETENTION_DATA !== 'undefined') {
+  runRender(window.CE_RETENTION_DATA);
+} else {
+  fetch('./ce_retention_dashboard_data.json')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(runRender)
+    .catch(e => {
+      console.error('Error al cargar datos (ni ce_retention_dashboard_data.js ni el JSON via fetch funcionaron):', e);
+      document.getElementById('ce-main').style.display = 'none';
+      document.getElementById('fallback').style.display = 'block';
+    });
+}
+
+function safeChart(canvasId, config) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  if (typeof Chart === 'undefined') {
+    el.parentElement.innerHTML = '<p style="font-size:11px;color:var(--slate-lt);padding:12px 0">No se pudo cargar la librería de gráficos. Los KPIs y tablas de arriba sí son válidos.</p>';
+    return;
+  }
+  try { return new Chart(el, config); }
+  catch (e) {
+    console.error('Error creando chart ' + canvasId + ':', e);
+    el.parentElement.innerHTML = '<p style="font-size:11px;color:var(--slate-lt);padding:12px 0">No se pudo dibujar este gráfico.</p>';
+  }
+}
+
+function render(data) {
+  document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
+  document.getElementById('periodoSub').textContent =
+    `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''} · Fuente: HubSpot CRM (tickets) + Metabase (bi_ce_interactions)`;
+
+  try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
+  try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
+  try { renderCsat(data.kpis?.csat_promoter); } catch (e) { console.error('Error en renderCsat:', e); }
+  try { renderPais(data.por_pais); } catch (e) { console.error('Error en renderPais:', e); }
+}
+
+function sourceTag(fuente) {
+  if (fuente === 'hubspot') return '<div class="kpi-source hubspot">● HubSpot (sync)</div>';
+  if (fuente === 'hubspot_proxy') return '<div class="kpi-source hubspot">● HubSpot (proxy, sync)</div>';
+  return '<div class="kpi-source metabase">Metabase (manual)</div>';
+}
+
+function renderKpis(k) {
+  if (!k) return;
+  const cards = [
+    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox', fuente: k.volumen?.fuente, note: k.volumen?.nota },
+    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock', fuente: k.tiempo_cierre_horas?.fuente, note: `${fmt(k.tiempo_cierre_horas?.base_tickets)} tickets, ${k.tiempo_cierre_horas?.periodo ?? ''}` },
+    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat', fuente: k.reopen?.fuente, note: `${fmt(k.reopen?.reopen)} de ${fmt(k.reopen?.volumen)} tickets` },
+    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target', fuente: k.fcr?.fuente, note: `${fmt(k.fcr?.gestionados_primer_contacto)} de ${fmt(k.fcr?.cerrados)} cerrados` },
+    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile', fuente: k.csat_promoter?.fuente, note: `Cobertura ${k.csat_promoter?.tasa_respuesta_pct ?? '—'}%` },
+  ];
+  document.getElementById('kpiStrip').innerHTML = cards.map(c => `
+    <div class="kpi-card">
+      <div class="kpi-icon-lucide"><i data-lucide="${c.icon}"></i></div>
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value ${c.vcls}">${c.value}</div>
+      ${sourceTag(c.fuente)}
+      <div class="kpi-note">${c.note ?? ''}</div>
+    </div>`).join('');
+}
+
+function renderWeekly(t) {
+  if (!t) return;
+  const barColors = t.volumes.map((_, i) => i >= (t.censured_from_index ?? t.volumes.length) ? '#CBD5E1' : '#00BFA5');
+  safeChart('chartWeekly', {
+    data: {
+      labels: t.weeks,
+      datasets: [
+        { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22 },
+        { type: 'line', label: 'Horas prom. hasta cierre', data: t.close_hours, borderColor: '#1A2B4A', backgroundColor: '#1A2B4A', yAxisID: 'y1', tension: 0.3, pointRadius: 3, borderWidth: 2 },
+      ],
     },
-    plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}
-  }
-});
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { position: 'left', grid: { color: '#F0F4F8' }, title: { display: true, text: 'Tickets', font: { size: 10 } } },
+        y1: { position: 'right', grid: { display: false }, title: { display: true, text: 'Horas', font: { size: 10 } } },
+        x: { grid: { display: false } },
+      },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+    },
+  });
+}
 
-new Chart(document.getElementById('chartCsat'), {
-  type:'bar',
-  data:{
-    labels:['Promoter','Passive','Detractor'],
-    datasets:[{label:'Tickets', data:[5926,88,242], backgroundColor:['#22C55E','#F5A623','#EF4444'], borderRadius:4, maxBarThickness: 34}]
-  },
-  options:{
-    indexAxis:'y', maintainAspectRatio:false,
-    scales:{x:{grid:{color:'#F0F4F8'}}, y:{grid:{display:false}}},
-    plugins:{legend:{display:false}}
-  }
-});
+function renderCsat(c) {
+  if (!c) return;
+  document.getElementById('csatSub').textContent = `De los tickets con encuesta respondida (${fmt(c.total_respuestas)})`;
+  safeChart('chartCsat', {
+    type: 'bar',
+    data: {
+      labels: ['Promoter', 'Passive', 'Detractor'],
+      datasets: [{ label: 'Tickets', data: [c.promoter, c.passive, c.detractor], backgroundColor: ['#22C55E', '#F5A623', '#EF4444'], borderRadius: 4, maxBarThickness: 34 }],
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false,
+      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
 
-new Chart(document.getElementById('chartCountry'), {
-  type:'bar',
-  data:{
-    labels:['Costa Rica','Colombia','México','Rep. Dom.','Argentina','Panamá','Perú'],
-    datasets:[{label:'Horas prom. cierre', data:[98.6,74.0,71.0,54.7,29.0,12.8,0.2], backgroundColor:'#00BFA5', borderRadius:4, maxBarThickness: 18}]
-  },
-  options:{
-    indexAxis:'y', maintainAspectRatio:false,
-    scales:{x:{grid:{color:'#F0F4F8'}}, y:{grid:{display:false}}},
-    plugins:{legend:{display:false}}
-  }
-});
+function renderPais(rows) {
+  if (!rows) return;
+  const tbody = document.getElementById('paisTableBody');
+  tbody.innerHTML = rows.map(r => {
+    const paisCell = r.pais === 'Sin país' ? '<span class="badge badge-gray">Sin país</span>' : r.pais;
+    const cierreBadge = r.cierre_horas >= 90 ? `<span class="badge badge-red">${r.cierre_horas.toFixed(1)} h</span>`
+      : r.cierre_horas <= 15 ? `<span class="badge badge-green">${r.cierre_horas.toFixed(1)} h</span>`
+      : `${r.cierre_horas.toFixed(1)} h`;
+    return `<tr><td>${paisCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${cierreBadge}</td></tr>`;
+  }).join('');
+
+  const excludingNoCountry = rows.filter(r => r.pais !== 'Sin país');
+  safeChart('chartCountry', {
+    type: 'bar',
+    data: {
+      labels: excludingNoCountry.map(r => r.pais).sort((a, b) => {
+        const ra = excludingNoCountry.find(r => r.pais === a), rb = excludingNoCountry.find(r => r.pais === b);
+        return rb.cierre_horas - ra.cierre_horas;
+      }),
+      datasets: [{ label: 'Horas prom. cierre', data: excludingNoCountry.slice().sort((a, b) => b.cierre_horas - a.cierre_horas).map(r => r.cierre_horas), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false,
+      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
 </script>
 
 </body>
