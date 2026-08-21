@@ -94,7 +94,6 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .kpi-value.v-green  { color: #059669; }
 .kpi-value.v-red    { color: #DC2626; }
 .kpi-value.v-amber  { color: #D97706; }
-.kpi-note { font-size: 10.5px; color: var(--slate-lt); margin-top: 8px; line-height: 1.4; }
 .kpi-delta { display:inline-flex; align-items:center; gap:4px; font-size: 10.5px; font-weight: 700; margin-top: 8px; width: fit-content; }
 .kpi-delta.up { color: #059669; }
 .kpi-delta.down { color: #DC2626; }
@@ -140,10 +139,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 .badge-gray   { background: #F1F5F9; color: #4A5568; }
 
 /* Info note / callout */
-.info-note { font-size: 11.5px; color: var(--slate); line-height: 1.7; }
-.info-note b { color: var(--dark); }
-.callout-card { background: linear-gradient(165deg, #FFFBEB, #FFFFFF 70%); border: 1px solid #FDE68A; border-radius: 14px; padding: 20px 22px; }
-.callout-card .chart-card-title { display:flex; align-items:center; gap:8px; }
 
 /* Footer */
 .footer { text-align: center; padding: 24px; font-size: 11px; color: var(--slate-lt); border-top: 1px solid var(--border); margin-top: 12px; }
@@ -237,20 +232,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     </div>
   </div>
 
-  <hr class="section-divider">
-
-  <!-- ── SECCIÓN 4: NOTAS ── -->
-  <div class="callout-card">
-    <div class="chart-card-title"><i data-lucide="alert-triangle" style="width:15px;height:15px;color:#D97706"></i>Notas antes de reportar estos números</div>
-    <div class="info-note" style="margin-top:10px">
-      <b>1) FCR es una aproximación</b>, todavía en validación con el equipo — mide casos resueltos en el primer contacto sobre el total de casos cerrados, pero no es aún la métrica oficial certificada.<br><br>
-      <b>2) Reopen</b> cuenta los casos que el cliente tuvo que reabrir después de que ya estaban cerrados.<br><br>
-      <b>3) Solo el 11.4% de los casos tiene país registrado</b> — el corte geográfico es representativo únicamente de esa parte, no del total.<br><br>
-      <b>4) CSAT</b> refleja solo a quienes respondieron la encuesta de satisfacción, que son pocos frente al total de casos.<br><br>
-      <b>5) Los números no incluyen correos automáticos de rebote</b> (notificaciones que no corresponden a casos reales de soporte).<br><br>
-      <b>6) Todos los datos se actualizan automáticamente cada semana</b> — no hace falta refrescarlos a mano.
-    </div>
-  </div>
 
 </main>
 </div>
@@ -437,15 +418,15 @@ function deltaBadge(current, previous, opts) {
 function renderKpis(k, cmpK) {
   if (!k) return;
   const cards = [
-    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox', note: k.volumen?.nota,
+    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox',
       delta: deltaBadge(k.volumen?.valor, cmpK?.volumen?.valor, { higherIsBetter: null, decimals: 0 }) },
-    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock', note: `${fmt(k.tiempo_cierre_horas?.base_tickets)} tickets, ${k.tiempo_cierre_horas?.periodo ?? ''}`,
+    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock',
       delta: deltaBadge(k.tiempo_cierre_horas?.valor, cmpK?.tiempo_cierre_horas?.valor, { higherIsBetter: false, decimals: 1, unit: ' h' }) },
-    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat', note: `${fmt(k.reopen?.reopen)} de ${fmt(k.reopen?.volumen)} tickets`,
+    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat',
       delta: deltaBadge(k.reopen?.valor_pct, cmpK?.reopen?.valor_pct, { higherIsBetter: false, decimals: 1, unit: ' pts' }) },
-    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target', note: `${fmt(k.fcr?.gestionados_primer_contacto)} de ${fmt(k.fcr?.cerrados)} cerrados`,
+    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target',
       delta: deltaBadge(k.fcr?.valor_pct, cmpK?.fcr?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
-    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile', note: `Cobertura ${k.csat_promoter?.tasa_respuesta_pct ?? '—'}%`,
+    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile',
       delta: deltaBadge(k.csat_promoter?.valor_pct, cmpK?.csat_promoter?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
@@ -454,7 +435,6 @@ function renderKpis(k, cmpK) {
       <div class="kpi-label">${c.label}</div>
       <div class="kpi-value ${c.vcls}">${c.value}</div>
       ${c.delta || ''}
-      <div class="kpi-note">${c.note ?? ''}</div>
     </div>`).join('');
 }
 
