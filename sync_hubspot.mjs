@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 // sync_hubspot.mjs
 //
-// Regenera SOLO los campos de ce_retention_dashboard_data.json que vienen de
-// HubSpot (volumen, reopen, FCR, tickets por país) y reescribe también
-// ce_retention_dashboard_data.js a partir de ese JSON. index.html no se toca
-// nunca — mismo patrón que CE-luciaBot (ver INSTRUCTIVO.md).
+// Actualiza SOLO los campos de ce_retention_dashboard_data.json que vienen de
+// HubSpot (volumen, reopen, FCR) y reescribe ce_retention_dashboard_data.js.
+// index.html no se toca nunca — mismo patrón que CE-luciaBot (ver INSTRUCTIVO.md).
 //
-// Los campos que vienen de Metabase (tiempo de cierre, CSAT, horas de cierre
-// por país) NO se tocan — se preservan tal cual estén en el JSON existente.
-// Esos se actualizan a mano corriendo de nuevo la consulta en Metabase.
+// Desde el 21-ago-2026, "tickets por país" YA NO sale de aquí — se movió a
+// Metabase (bi_ce_interactions.country), que calzó mucho mejor contra el
+// snapshot original que la property de HubSpot. Ver merge_metabase.mjs.
+//
+// Este script NO toca el histórico (ce_retention_dashboard_history.json) —
+// eso lo hace append_history.mjs, después de que tanto este script como
+// merge_metabase.mjs hayan actualizado ce_retention_dashboard_data.json.
+// Así el snapshot que queda en el histórico ya tiene AMBAS fuentes fusionadas,
+// no solo la mitad de HubSpot.
 //
 // Uso:
 //   HUBSPOT_TOKEN=pat-... node sync_hubspot.mjs
-// o crear un .env junto a este script con HUBSPOT_TOKEN=... y cargarlo antes
-// (este script no trae dotenv por defecto para no sumar dependencias).
 //
 // Requiere Node 18+ (usa fetch nativo).
 
@@ -34,28 +37,25 @@ if (!TOKEN) {
 const PERIOD_START = process.env.PERIOD_START ?? '2026-05-01T00:00:00.000Z';
 const PERIOD_END = process.env.PERIOD_END ?? new Date().toISOString();
 
-// ─────────────────────────────────────────────────────────────────────────
-// PENDIENTE DE CONFIRMAR (ver INSTRUCTIVO.md, sección "Pendientes"):
-// estos 3 valores son placeholders. Antes de confiar en los números en vivo,
-// hay que confirmarlos contra el portal real de HubSpot (Settings ->
-// Properties, o list_pipeline_stages / get_properties vía el MCP de HubSpot)
-// — igual que recomienda el instructivo de Lucía: "pedir el filtro exacto
-// de cada widget antes de automatizar, para que el número calce".
-// ─────────────────────────────────────────────────────────────────────────
+// CONFIRMADO (20-ago-2026): mailer-daemon@amazonses.com es el remitente
+// automático de notificaciones de rebote (bounce) de Amazon SES — el
+// servicio de correo que usa el sistema de facturación electrónica de
+// Alegra. No es un cliente ni un caso de soporte real; es tráfico de
+// infraestructura de correo que entró como tickets normales al pipeline y
+// infló volumen, reopen y FCR (picos de miles de tickets de un día a otro).
+// Filtro: coincidencia EXACTA (EQ/NEQ) sobre hs_all_associated_contact_emails
+// — a propósito NO se usa CONTAINS_TOKEN, porque esa comparación fragmenta
+// el email por los puntos (tokeniza "mailer-daemon@amazonses.com" en
+// pedazos) y genera conteos inflados/falsos positivos.
+const BOUNCE_EXCLUSION_FILTERS = [
+  { propertyName: 'hs_all_associated_contact_emails', operator: 'NEQ', value: 'mailer-daemon@amazonses.com' },
+];
 
-// TODO: property/valor real que identifica los ~7,900 tickets de rebote de
-// mailer-daemon@amazonses.com (caso REVOPS-1324). Hoy no se excluye nada.
-const BOUNCE_EXCLUSION_FILTERS = [];
-
-// TODO: property/valor real de "cerrado" en el pipeline de tickets de este
-// portal (stage IDs). HAS_PROPERTY sobre hs_pipeline_stage es un placeholder
-// demasiado amplio — probablemente incluye tickets abiertos también.
-const CLOSED_FILTER = { propertyName: 'hs_pipeline_stage', operator: 'HAS_PROPERTY' };
-
-// TODO: nombre real de la property de país del ticket en este portal.
-const COUNTRY_PROPERTY = 'country';
-
-const COUNTRIES = ['Colombia', 'Rep. Dominicana', 'México', 'Costa Rica', 'Argentina', 'Panamá', 'Perú'];
+// CONFIRMADO (21-ago-2026): "cerrado" = closed_date HAS_PROPERTY (tickets con
+// fecha de cierre poblada). Reemplaza el placeholder anterior (hs_pipeline_stage
+// HAS_PROPERTY), que era demasiado amplio y probablemente contaba tickets
+// todavía abiertos. Validado contra el snapshot original (99,096 vs. 98,378).
+const CLOSED_FILTER = { propertyName: 'closed_date', operator: 'HAS_PROPERTY' };
 
 async function hsSearchTotal(filterGroups) {
   const res = await fetch('https://api.hubapi.com/crm/v3/objects/tickets/search', {
@@ -97,17 +97,8 @@ async function main() {
   ]);
   console.log(`  FCR (primer contacto): ${fcr}`);
 
-  const porPaisCounts = {};
-  for (const country of COUNTRIES) {
-    porPaisCounts[country] = await hsSearchTotal([
-      { filters: [...dateRangeFilters(), { propertyName: COUNTRY_PROPERTY, operator: 'EQ', value: country }] },
-    ]);
-    console.log(`  ${country}: ${porPaisCounts[country]}`);
-  }
-
-  // ── Verificación básica antes de sobrescribir (recomendación del instructivo
-  // de Lucía, sección 5.4): si algo se ve fuera de rango razonable, avisar en
-  // vez de pisar el JSON en silencio.
+  // ── Verificación básica antes de sobrescribir (si algo se ve fuera de
+  // rango razonable, avisar en vez de pisar el JSON en silencio).
   if (volumen < 1000 || volumen > 500000) {
     console.error(`ADVERTENCIA: volumen (${volumen}) parece fuera de rango razonable. Revisar antes de confiar en este resultado. No se sobrescribe el JSON.`);
     process.exit(1);
@@ -115,32 +106,30 @@ async function main() {
 
   const current = JSON.parse(readFileSync(JSON_PATH, 'utf8'));
 
-  current.meta.generado = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }) + ' (sincronizado con HubSpot)';
+  const nowBogota = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+  current.meta.generado = nowBogota + ' (actualizado automáticamente)';
   current.meta.periodo.inicio = PERIOD_START.slice(0, 10);
   current.meta.periodo.fin = PERIOD_END.slice(0, 10);
 
   current.kpis.volumen.valor = volumen;
+  current.kpis.volumen.nota = 'No incluye correos automáticos de rebote (no son casos reales de soporte)';
   current.kpis.reopen.reopen = reopen;
   current.kpis.reopen.volumen = volumen;
   current.kpis.reopen.valor_pct = volumen ? Number(((reopen / volumen) * 100).toFixed(2)) : 0;
+  current.kpis.reopen.nota = 'Casos que el cliente tuvo que reabrir después de haber sido cerrados';
   current.kpis.fcr.gestionados_primer_contacto = fcr;
   current.kpis.fcr.cerrados = cerrados;
   current.kpis.fcr.valor_pct = cerrados ? Number(((fcr / cerrados) * 100).toFixed(1)) : 0;
+  current.kpis.fcr.nota = 'Casos resueltos en el primer contacto, sobre el total de casos cerrados';
 
-  const totalConPais = Object.values(porPaisCounts).reduce((a, b) => a + b, 0);
-  const sinPais = Math.max(volumen - totalConPais, 0);
-  current.por_pais = current.por_pais.map((row) => {
-    const tickets = row.pais === 'Sin país' ? sinPais : (porPaisCounts[row.pais] ?? row.tickets);
-    return { ...row, tickets, pct_total: volumen ? Number(((tickets / volumen) * 100).toFixed(1)) : row.pct_total };
-  });
-
-  // Los campos de Metabase (tiempo_cierre_horas, csat_promoter, tendencia_semanal,
-  // cierre_horas dentro de por_pais) quedan intactos — no se tocan aquí.
+  // Los campos de Metabase (tiempo_cierre_horas, csat_promoter, por_pais,
+  // tendencia_semanal) quedan intactos — no se tocan aquí. Los actualiza
+  // merge_metabase.mjs por separado.
 
   writeFileSync(JSON_PATH, JSON.stringify(current, null, 2) + '\n');
-  writeFileSync(JS_PATH, `// Generado automáticamente por sync_hubspot.mjs a partir de ce_retention_dashboard_data.json — no editar a mano.\nwindow.CE_RETENTION_DATA = ${JSON.stringify(current, null, 2)};\n`);
+  writeFileSync(JS_PATH, `// Generado automáticamente a partir de ce_retention_dashboard_data.json — no editar a mano.\nwindow.CE_RETENTION_DATA = ${JSON.stringify(current, null, 2)};\n`);
 
-  console.log('Listo — ce_retention_dashboard_data.json y .js actualizados.');
+  console.log('Listo — parte de HubSpot actualizada en data.json/.js (volumen/reopen/FCR).');
 }
 
 main().catch((e) => {

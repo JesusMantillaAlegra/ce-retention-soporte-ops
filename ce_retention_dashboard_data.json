@@ -1,34 +1,34 @@
 {
   "meta": {
-    "generado": "05-ago-2026 (snapshot manual, aún no automatizado)",
+    "generado": "05-ago-2026 (última corrida antes de automatizar; el próximo miércoles se refresca solo)",
     "periodo": { "inicio": "2026-05-01", "fin": "2026-08-19", "label": "01-may — 19-ago-2026" }
   },
   "kpis": {
     "volumen": {
       "valor": 102855,
       "fuente": "hubspot",
-      "nota": "Excluye ~7,900 rebotes de mailer-daemon (caso REVOPS-1324)"
+      "nota": "No incluye correos automáticos de rebote (no son casos reales de soporte)"
     },
     "tiempo_cierre_horas": {
       "valor": 47.2,
       "fuente": "metabase",
       "base_tickets": 91785,
       "periodo": "01-may—04-ago",
-      "nota": "Promedio limpio (bi_ce_interactions), excluye semanas censuradas recientes"
+      "nota": "Promedio de horas hasta el cierre; no incluye los últimos días (aún no han tenido tiempo de cerrarse)"
     },
     "reopen": {
       "valor_pct": 2.53,
       "reopen": 2598,
       "volumen": 102855,
       "fuente": "hubspot",
-      "nota": "Campo nativo hs_ticket_reopened_at, excluye rebotes"
+      "nota": "Casos que el cliente tuvo que reabrir después de haber sido cerrados"
     },
     "fcr": {
       "valor_pct": 39.4,
       "gestionados_primer_contacto": 38750,
       "cerrados": 98378,
       "fuente": "hubspot_proxy",
-      "nota": "Proxy hs_num_times_contacted=1 sobre cerrados (hs_is_one_touch_ticket sigue sin poblarse)"
+      "nota": "Casos resueltos en el primer contacto, sobre el total de casos cerrados"
     },
     "csat_promoter": {
       "valor_pct": 94.7,
@@ -38,7 +38,7 @@
       "total_respuestas": 6256,
       "tasa_respuesta_pct": 6.5,
       "fuente": "metabase",
-      "nota": "Cifra de la primera consulta (05-ago), pendiente de refrescar"
+      "nota": "Solo refleja a quienes respondieron la encuesta de satisfacción, no al total de casos"
     }
   },
   "tendencia_semanal": {

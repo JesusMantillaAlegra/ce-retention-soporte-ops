@@ -95,9 +95,18 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .kpi-value.v-red    { color: #DC2626; }
 .kpi-value.v-amber  { color: #D97706; }
 .kpi-note { font-size: 10.5px; color: var(--slate-lt); margin-top: 8px; line-height: 1.4; }
-.kpi-source { display:inline-flex; align-items:center; gap:4px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; margin-top: 8px; width: fit-content; }
-.kpi-source.hubspot { background:#DBEAFE; color:#1D4ED8; }
-.kpi-source.metabase { background:#F1F5F9; color:#4A5568; }
+.kpi-delta { display:inline-flex; align-items:center; gap:4px; font-size: 10.5px; font-weight: 700; margin-top: 8px; width: fit-content; }
+.kpi-delta.up { color: #059669; }
+.kpi-delta.down { color: #DC2626; }
+.kpi-delta.neu { color: var(--slate-lt); }
+
+/* Selector de periodo / comparación */
+.range-bar { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; background: #FFFFFF; border: 1px solid #EDF1F5; border-radius: 14px; padding: 14px 18px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(26,43,74,0.04); }
+.range-field { display: flex; flex-direction: column; gap: 4px; }
+.range-field label { font-size: 10px; font-weight: 700; color: var(--slate-lt); text-transform: uppercase; letter-spacing: 0.5px; }
+.range-field select { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: #fff; max-width: 260px; cursor: pointer; }
+.compare-toggle { align-self: center; display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--slate); cursor: pointer; padding-bottom: 1px; }
+.compare-toggle input { width: 15px; height: 15px; accent-color: var(--teal); cursor: pointer; }
 
 /* Grids */
 .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
@@ -155,7 +164,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   </div>
   <div style="display:flex;align-items:center;gap:14px">
     <span class="header-time" id="lastUpdated"></span>
-    <span class="header-badge">Borrador</span>
     <button class="btn-header" id="btnActualizar"><i data-lucide="refresh-cw"></i>Actualizar</button>
   </div>
 </header>
@@ -173,9 +181,11 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 <main class="main" id="ce-main">
 
   <!-- ── SECCIÓN 1: KPIs ── -->
-  <div class="section-label">Sprint CE-Retention — Data</div>
+  <div class="section-label">Soporte</div>
   <div class="section-title">Métricas operativas de soporte</div>
-  <div class="section-sub" id="periodoSub">Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Fuente: HubSpot CRM (tickets) + Metabase (bi_ce_interactions)</div>
+  <div class="section-sub" id="periodoSub">Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes</div>
+
+  <div id="rangeBar"></div>
 
   <div class="kpi-strip" id="kpiStrip"></div>
 
@@ -184,7 +194,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <!-- ── SECCIÓN 2: TENDENCIA ── -->
   <div class="section-label">Evolución</div>
   <div class="section-title">¿Cómo se ha movido la demanda y el tiempo de cierre?</div>
-  <div class="section-sub">Fuente: Metabase (snapshot manual) · Semanas grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
+  <div class="section-sub">Actualizado automáticamente cada semana · Semanas grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
 
   <div class="chart-grid-3" style="margin-bottom:0">
     <div class="chart-card">
@@ -204,19 +214,18 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <!-- ── SECCIÓN 3: PAÍS ── -->
   <div class="section-label">Corte geográfico</div>
   <div class="section-title">Tiempo de cierre por país</div>
-  <div class="section-sub">Volumen por país: HubSpot · Horas de cierre: Metabase (snapshot manual)</div>
+  <div class="section-sub">Volumen y horas de cierre por país, actualizado automáticamente cada semana</div>
 
   <div class="chart-grid-2" style="margin-bottom:20px">
     <div class="chart-card">
       <div class="chart-card-title">Horas promedio hasta cierre</div>
-      <div class="chart-card-sub">Por país (snapshot Metabase)</div>
+      <div class="chart-card-sub">Por país</div>
       <div class="chart-wrap"><canvas id="chartCountry"></canvas></div>
     </div>
     <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
       <div class="table-header">
         <div>
           <h3>Detalle por país</h3>
-          <div class="table-header-sub">Tickets: HubSpot · Cierre prom.: Metabase</div>
         </div>
       </div>
       <div class="table-scroll">
@@ -232,14 +241,14 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 
   <!-- ── SECCIÓN 4: NOTAS ── -->
   <div class="callout-card">
-    <div class="chart-card-title"><i data-lucide="alert-triangle" style="width:15px;height:15px;color:#D97706"></i>Notas de calidad de dato — leer antes de reportar estos números</div>
+    <div class="chart-card-title"><i data-lucide="alert-triangle" style="width:15px;height:15px;color:#D97706"></i>Notas antes de reportar estos números</div>
     <div class="info-note" style="margin-top:10px">
-      <b>1) FCR es un proxy, no el campo oficial.</b> El campo nativo `hs_is_one_touch_ticket` sigue sin registrar datos desde mayo. El KPI se calcula con `hs_num_times_contacted = 1` sobre tickets cerrados — razonable, pero no es 100% equivalente a "resuelto en el primer contacto"; confirmar con Agustín si se adopta como métrica oficial mientras se reactiva el campo real.<br><br>
-      <b>2) Reopen</b> usa la definición nativa de HubSpot (fecha de reapertura), no una ventana de negocio (ej. "mismo cliente en 7 días"). Si el equipo quiere esa definición más estricta, hay que calcularla aparte.<br><br>
-      <b>3) 88.6% de los tickets no tiene país asignado</b> — el corte geográfico solo es representativo del 11.4% restante. Vale la pena escalarlo como gap de instrumentación.<br><br>
-      <b>4) CSAT</b> tiene muy baja tasa de respuesta en este período — no representativo del total, solo de quienes respondieron. Es un snapshot manual de Metabase, pendiente de refrescar.<br><br>
-      <b>5) Limpieza de ruido:</b> volumen, reopen y FCR excluyen ~7,900 tickets de rebote (`mailer-daemon@amazonses.com`, ver caso REVOPS-1324) — ese volumen sigue activo y creciendo, se reporta aparte.<br><br>
-      <b>6) Datos en vivo vs. manuales:</b> volumen, reopen, FCR y tickets-por-país vienen de HubSpot y se regeneran corriendo <code>sync_hubspot.mjs</code> (ver INSTRUCTIVO.md). Tiempo de cierre, CSAT y horas de cierre por país vienen de Metabase y se actualizan a mano.
+      <b>1) FCR es una aproximación</b>, todavía en validación con el equipo — mide casos resueltos en el primer contacto sobre el total de casos cerrados, pero no es aún la métrica oficial certificada.<br><br>
+      <b>2) Reopen</b> cuenta los casos que el cliente tuvo que reabrir después de que ya estaban cerrados.<br><br>
+      <b>3) Solo el 11.4% de los casos tiene país registrado</b> — el corte geográfico es representativo únicamente de esa parte, no del total.<br><br>
+      <b>4) CSAT</b> refleja solo a quienes respondieron la encuesta de satisfacción, que son pocos frente al total de casos.<br><br>
+      <b>5) Los números no incluyen correos automáticos de rebote</b> (notificaciones que no corresponden a casos reales de soporte).<br><br>
+      <b>6) Todos los datos se actualizan automáticamente cada semana</b> — no hace falta refrescarlos a mano.
     </div>
   </div>
 
@@ -251,9 +260,10 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <p>Verifica que <code>ce_retention_dashboard_data.js</code> (o <code>ce_retention_dashboard_data.json</code>) esté en la misma carpeta que este archivo.</p>
 </div>
 
-<div class="footer">Alegra — Métricas Operativas de Soporte · HubSpot CRM + bi_ce_interactions (Redshift) · index.html no cambia, solo se regeneran los datos</div>
+<div class="footer">Alegra — Métricas Operativas de Soporte · Datos actualizados automáticamente cada semana</div>
 
 <script src="./ce_retention_dashboard_data.js"></script>
+<script src="./ce_retention_dashboard_history.js"></script>
 <script>
 (function () {
   document.body.style.visibility = 'visible';
@@ -274,9 +284,9 @@ try {
 
 const fmt = n => typeof n === 'number' ? n.toLocaleString('es-CO') : (n ?? '—');
 
-function runRender(data) {
+function runRender(data, cmp) {
   try {
-    render(data);
+    render(data, cmp);
     if (typeof lucide !== 'undefined') lucide.createIcons();
   } catch (e) {
     console.error('Error en render():', e);
@@ -304,6 +314,84 @@ if (typeof window.CE_RETENTION_DATA !== 'undefined') {
     });
 }
 
+// ── Histórico: cada corrida semanal agrega un snapshot nuevo a
+// ce_retention_dashboard_history.json (nunca pisa los anteriores) — esto es
+// lo que permite comparar, por ejemplo, "cómo estaba el dashboard a fin de
+// agosto" contra el snapshot actual, en vez de ver solo la última foto.
+//
+// Cada snapshot es una FOTO ACUMULADA desde el inicio del período (no una
+// semana suelta) — por eso "comparar periodos" acá compara dos fotos en el
+// tiempo (¿mejoró o empeoró el promedio/tasa entre una fecha y otra?), no
+// suma semanas como en CE-luciaBot (que sí guarda una semana por snapshot).
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function populateSnapshotSelect(sel, sorted) {
+  const byMonth = new Map(); // 'YYYY-MM' -> [idx,...]
+  sorted.forEach((h, i) => {
+    const ym = (h.snapshot_id || '').slice(0, 7);
+    if (!byMonth.has(ym)) byMonth.set(ym, []);
+    byMonth.get(ym).push(i);
+  });
+  sel.innerHTML = [...byMonth.entries()].map(([ym, idxs]) => {
+    const [y, m] = ym.split('-');
+    const label = m ? `${MESES_ES[Number(m) - 1]} ${y}` : ym;
+    const options = idxs.map((i) => {
+      const h = sorted[i];
+      const optLabel = `${h.snapshot_id ?? '?'} · ${h.meta?.periodo?.label ?? ''}`;
+      return `<option value="${i}">${optLabel}</option>`;
+    }).join('');
+    return `<optgroup label="${label}">${options}</optgroup>`;
+  }).join('');
+}
+
+function setupRangeBar(history) {
+  if (!Array.isArray(history) || !history.length) return;
+  const container = document.getElementById('rangeBar');
+  if (!container) return;
+  const sorted = history.slice().sort((a, b) => (b.snapshot_id || '').localeCompare(a.snapshot_id || ''));
+
+  container.className = 'range-bar';
+  container.innerHTML = `
+    <div class="range-field"><label>Ver periodo</label><select id="verSelect"></select></div>
+    <label class="compare-toggle"><input type="checkbox" id="compareToggle"> Comparar con otro periodo</label>
+    <div class="range-field" id="compareField" style="display:none"><label>Comparar con</label><select id="compareSelect"></select></div>
+  `;
+
+  const verSel = document.getElementById('verSelect');
+  const compareToggle = document.getElementById('compareToggle');
+  const compareField = document.getElementById('compareField');
+  const compareSel = document.getElementById('compareSelect');
+
+  populateSnapshotSelect(verSel, sorted);
+  populateSnapshotSelect(compareSel, sorted);
+  verSel.value = '0';
+  compareSel.value = String(Math.min(1, sorted.length - 1));
+
+  function trigger() {
+    const primary = sorted[Number(verSel.value)];
+    const compare = compareToggle.checked ? sorted[Number(compareSel.value)] : null;
+    if (primary) runRender(primary, compare);
+  }
+
+  verSel.addEventListener('change', trigger);
+  compareSel.addEventListener('change', trigger);
+  compareToggle.addEventListener('change', () => {
+    compareField.style.display = compareToggle.checked ? 'flex' : 'none';
+    trigger();
+  });
+
+  trigger();
+}
+
+if (typeof window.CE_RETENTION_HISTORY !== 'undefined') {
+  setupRangeBar(window.CE_RETENTION_HISTORY);
+} else {
+  fetch('./ce_retention_dashboard_history.json')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(setupRangeBar)
+    .catch(e => console.warn('No se pudo cargar el histórico de periodos (solo se ve la foto actual):', e));
+}
+
 function safeChart(canvasId, config) {
   const el = document.getElementById(canvasId);
   if (!el) return;
@@ -311,6 +399,8 @@ function safeChart(canvasId, config) {
     el.parentElement.innerHTML = '<p style="font-size:11px;color:var(--slate-lt);padding:12px 0">No se pudo cargar la librería de gráficos. Los KPIs y tablas de arriba sí son válidos.</p>';
     return;
   }
+  const existing = Chart.getChart(el); // destruir el chart anterior antes de redibujar (al cambiar de snapshot)
+  if (existing) existing.destroy();
   try { return new Chart(el, config); }
   catch (e) {
     console.error('Error creando chart ' + canvasId + ':', e);
@@ -318,38 +408,52 @@ function safeChart(canvasId, config) {
   }
 }
 
-function render(data) {
+function render(data, cmp) {
   document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
   document.getElementById('periodoSub').textContent =
-    `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''} · Fuente: HubSpot CRM (tickets) + Metabase (bi_ce_interactions)`;
+    `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 
-  try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
+  try { renderKpis(data.kpis, cmp?.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
   try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
   try { renderCsat(data.kpis?.csat_promoter); } catch (e) { console.error('Error en renderCsat:', e); }
   try { renderPais(data.por_pais); } catch (e) { console.error('Error en renderPais:', e); }
 }
 
-function sourceTag(fuente) {
-  if (fuente === 'hubspot') return '<div class="kpi-source hubspot">● HubSpot (sync)</div>';
-  if (fuente === 'hubspot_proxy') return '<div class="kpi-source hubspot">● HubSpot (proxy, sync)</div>';
-  return '<div class="kpi-source metabase">Metabase (manual)</div>';
+// Compara un valor contra el mismo campo del periodo elegido para comparar.
+// higherIsBetter: true (más es mejor), false (menos es mejor), null (informativo, sin juicio).
+function deltaBadge(current, previous, opts) {
+  if (typeof current !== 'number' || typeof previous !== 'number') return '';
+  const decimals = opts.decimals ?? 0;
+  const diff = current - previous;
+  const flat = Math.abs(diff) < Math.pow(10, -decimals) / 2;
+  const up = diff > 0;
+  let cls = 'neu';
+  if (!flat && opts.higherIsBetter !== null) cls = (opts.higherIsBetter ? up : !up) ? 'up' : 'down';
+  const arrow = flat ? '→' : (up ? '↑' : '↓');
+  const sign = (!flat && up) ? '+' : '';
+  return `<div class="kpi-delta ${cls}">${arrow} ${sign}${diff.toFixed(decimals)}${opts.unit ?? ''} vs. periodo comparado</div>`;
 }
 
-function renderKpis(k) {
+function renderKpis(k, cmpK) {
   if (!k) return;
   const cards = [
-    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox', fuente: k.volumen?.fuente, note: k.volumen?.nota },
-    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock', fuente: k.tiempo_cierre_horas?.fuente, note: `${fmt(k.tiempo_cierre_horas?.base_tickets)} tickets, ${k.tiempo_cierre_horas?.periodo ?? ''}` },
-    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat', fuente: k.reopen?.fuente, note: `${fmt(k.reopen?.reopen)} de ${fmt(k.reopen?.volumen)} tickets` },
-    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target', fuente: k.fcr?.fuente, note: `${fmt(k.fcr?.gestionados_primer_contacto)} de ${fmt(k.fcr?.cerrados)} cerrados` },
-    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile', fuente: k.csat_promoter?.fuente, note: `Cobertura ${k.csat_promoter?.tasa_respuesta_pct ?? '—'}%` },
+    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox', note: k.volumen?.nota,
+      delta: deltaBadge(k.volumen?.valor, cmpK?.volumen?.valor, { higherIsBetter: null, decimals: 0 }) },
+    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock', note: `${fmt(k.tiempo_cierre_horas?.base_tickets)} tickets, ${k.tiempo_cierre_horas?.periodo ?? ''}`,
+      delta: deltaBadge(k.tiempo_cierre_horas?.valor, cmpK?.tiempo_cierre_horas?.valor, { higherIsBetter: false, decimals: 1, unit: ' h' }) },
+    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat', note: `${fmt(k.reopen?.reopen)} de ${fmt(k.reopen?.volumen)} tickets`,
+      delta: deltaBadge(k.reopen?.valor_pct, cmpK?.reopen?.valor_pct, { higherIsBetter: false, decimals: 1, unit: ' pts' }) },
+    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target', note: `${fmt(k.fcr?.gestionados_primer_contacto)} de ${fmt(k.fcr?.cerrados)} cerrados`,
+      delta: deltaBadge(k.fcr?.valor_pct, cmpK?.fcr?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
+    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile', note: `Cobertura ${k.csat_promoter?.tasa_respuesta_pct ?? '—'}%`,
+      delta: deltaBadge(k.csat_promoter?.valor_pct, cmpK?.csat_promoter?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
     <div class="kpi-card">
       <div class="kpi-icon-lucide"><i data-lucide="${c.icon}"></i></div>
       <div class="kpi-label">${c.label}</div>
       <div class="kpi-value ${c.vcls}">${c.value}</div>
-      ${sourceTag(c.fuente)}
+      ${c.delta || ''}
       <div class="kpi-note">${c.note ?? ''}</div>
     </div>`).join('');
 }
