@@ -94,18 +94,17 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .kpi-value.v-green  { color: #059669; }
 .kpi-value.v-red    { color: #DC2626; }
 .kpi-value.v-amber  { color: #D97706; }
-.kpi-delta { display:inline-flex; align-items:center; gap:4px; font-size: 10.5px; font-weight: 700; margin-top: 8px; width: fit-content; }
-.kpi-delta.up { color: #059669; }
-.kpi-delta.down { color: #DC2626; }
-.kpi-delta.neu { color: var(--slate-lt); }
-
-/* Selector de periodo / comparación */
-.range-bar { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; background: #FFFFFF; border: 1px solid #EDF1F5; border-radius: 14px; padding: 14px 18px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(26,43,74,0.04); }
-.range-field { display: flex; flex-direction: column; gap: 4px; }
-.range-field label { font-size: 10px; font-weight: 700; color: var(--slate-lt); text-transform: uppercase; letter-spacing: 0.5px; }
-.range-field select { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: #fff; max-width: 260px; cursor: pointer; }
-.compare-toggle { align-self: center; display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--slate); cursor: pointer; padding-bottom: 1px; }
-.compare-toggle input { width: 15px; height: 15px; accent-color: var(--teal); cursor: pointer; }
+/* Barra de filtros (Filtros + Fecha + Aplicar) */
+.filter-bar { background: #FFFFFF; border: 1px solid #EDF1F5; border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(26,43,74,0.04); }
+.filter-bar-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.filter-label { font-size: 10.5px; font-weight: 700; color: var(--slate-lt); letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
+.filter-select-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; background: #F1F5F9; color: var(--slate-lt); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); cursor: not-allowed; appearance: none; -webkit-appearance: none; }
+.filter-date-input { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: #fff; }
+.filter-date-input:disabled { color: var(--slate-lt); background: #F7F9FB; cursor: default; }
+.filter-arrow { color: var(--slate-lt); font-size: 13px; }
+.filter-apply-btn { margin-left: auto; padding: 9px 22px; border-radius: 8px; border: none; background: var(--teal); color: #fff; font-family: var(--font-head); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; }
+.filter-apply-btn:hover { background: var(--teal-dk); }
+.filter-note { font-size: 11px; font-style: italic; color: var(--slate-lt); margin-top: 10px; }
 
 /* Grids */
 .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
@@ -265,9 +264,16 @@ try {
 
 const fmt = n => typeof n === 'number' ? n.toLocaleString('es-CO') : (n ?? '—');
 
-function runRender(data, cmp) {
+// Snapshot que se está mostrando ahora mismo. Se declara ACÁ ARRIBA a
+// propósito, antes de cualquier llamada a runRender(): render() le asigna
+// valor, y si se declarara más abajo con `let` la primera carga revienta con
+// un ReferenceError por "temporal dead zone" y la página queda en blanco
+// (mismo tropiezo ya documentado en CE-luciaBot con MESES_ES).
+let LAST_DATA = null;
+
+function runRender(data) {
   try {
-    render(data, cmp);
+    render(data);
     if (typeof lucide !== 'undefined') lucide.createIcons();
   } catch (e) {
     console.error('Error en render():', e);
@@ -296,33 +302,17 @@ if (typeof window.CE_RETENTION_DATA !== 'undefined') {
 }
 
 // ── Histórico: cada corrida semanal agrega un snapshot nuevo a
-// ce_retention_dashboard_history.json (nunca pisa los anteriores) — esto es
-// lo que permite comparar, por ejemplo, "cómo estaba el dashboard a fin de
-// agosto" contra el snapshot actual, en vez de ver solo la última foto.
-//
-// Cada snapshot es una FOTO ACUMULADA desde el inicio del período (no una
-// semana suelta) — por eso "comparar periodos" acá compara dos fotos en el
-// tiempo (¿mejoró o empeoró el promedio/tasa entre una fecha y otra?), no
-// suma semanas como en CE-luciaBot (que sí guarda una semana por snapshot).
-const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-
-function populateSnapshotSelect(sel, sorted) {
-  const byMonth = new Map(); // 'YYYY-MM' -> [idx,...]
-  sorted.forEach((h, i) => {
-    const ym = (h.snapshot_id || '').slice(0, 7);
-    if (!byMonth.has(ym)) byMonth.set(ym, []);
-    byMonth.get(ym).push(i);
-  });
-  sel.innerHTML = [...byMonth.entries()].map(([ym, idxs]) => {
-    const [y, m] = ym.split('-');
-    const label = m ? `${MESES_ES[Number(m) - 1]} ${y}` : ym;
-    const options = idxs.map((i) => {
-      const h = sorted[i];
-      const optLabel = `${h.snapshot_id ?? '?'} · ${h.meta?.periodo?.label ?? ''}`;
-      return `<option value="${i}">${optLabel}</option>`;
-    }).join('');
-    return `<optgroup label="${label}">${options}</optgroup>`;
-  }).join('');
+// ce_retention_dashboard_history.json (nunca pisa los anteriores). El filtro
+// de fecha elige qué snapshot mostrar: el más reciente cuyo snapshot_id sea
+// <= la fecha "Hasta" elegida (o el más antiguo de todos si la fecha es
+// anterior al primer snapshot que existe). "Desde" es informativo — muestra
+// el inicio real del período de ese snapshot, no es editable.
+function nearestSnapshotIdx(sorted, dateStr) {
+  if (!dateStr) return 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if ((sorted[i].snapshot_id || '') <= dateStr) return i;
+  }
+  return sorted.length - 1;
 }
 
 function setupRangeBar(history) {
@@ -330,38 +320,35 @@ function setupRangeBar(history) {
   const container = document.getElementById('rangeBar');
   if (!container) return;
   const sorted = history.slice().sort((a, b) => (b.snapshot_id || '').localeCompare(a.snapshot_id || ''));
-
-  container.className = 'range-bar';
+  const oldest = sorted[sorted.length - 1].snapshot_id;
+  const newest = sorted[0].snapshot_id;
+  container.className = 'filter-bar';
   container.innerHTML = `
-    <div class="range-field"><label>Ver periodo</label><select id="verSelect"></select></div>
-    <label class="compare-toggle"><input type="checkbox" id="compareToggle"> Comparar con otro periodo</label>
-    <div class="range-field" id="compareField" style="display:none"><label>Comparar con</label><select id="compareSelect"></select></div>
+    <div class="filter-bar-row">
+      <span class="filter-label">Filtros</span>
+      <span class="filter-select-pill filter-select-off">No disponible <span style="font-size:9px">▾</span></span>
+      <span class="filter-label">Fecha</span>
+      <input type="date" class="filter-date-input" id="dateDesde" disabled>
+      <span class="filter-arrow">→</span>
+      <input type="date" class="filter-date-input" id="dateHasta" min="${oldest}" max="${newest}" value="${newest}">
+      <button type="button" class="filter-apply-btn" id="btnAplicarFiltro">Aplicar</button>
+    </div>
+    <div class="filter-note">Filtro por país no disponible todavía — la mayoría de los tickets aún no tiene país registrado, así que filtrar por país daría una foto incompleta.</div>
   `;
 
-  const verSel = document.getElementById('verSelect');
-  const compareToggle = document.getElementById('compareToggle');
-  const compareField = document.getElementById('compareField');
-  const compareSel = document.getElementById('compareSelect');
+  const desdeInput = document.getElementById('dateDesde');
+  const hastaInput = document.getElementById('dateHasta');
 
-  populateSnapshotSelect(verSel, sorted);
-  populateSnapshotSelect(compareSel, sorted);
-  verSel.value = '0';
-  compareSel.value = String(Math.min(1, sorted.length - 1));
-
-  function trigger() {
-    const primary = sorted[Number(verSel.value)];
-    const compare = compareToggle.checked ? sorted[Number(compareSel.value)] : null;
-    if (primary) runRender(primary, compare);
+  function apply() {
+    const hastaIdx = nearestSnapshotIdx(sorted, hastaInput.value);
+    const primary = sorted[hastaIdx];
+    if (!primary) return;
+    desdeInput.value = primary.meta?.periodo?.inicio || oldest;
+    runRender(primary);
   }
 
-  verSel.addEventListener('change', trigger);
-  compareSel.addEventListener('change', trigger);
-  compareToggle.addEventListener('change', () => {
-    compareField.style.display = compareToggle.checked ? 'flex' : 'none';
-    trigger();
-  });
-
-  trigger();
+  document.getElementById('btnAplicarFiltro').addEventListener('click', apply);
+  apply();
 }
 
 if (typeof window.CE_RETENTION_HISTORY !== 'undefined') {
@@ -389,52 +376,32 @@ function safeChart(canvasId, config) {
   }
 }
 
-function render(data, cmp) {
+function render(data) {
+  LAST_DATA = data;
   document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
   document.getElementById('periodoSub').textContent =
     `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 
-  try { renderKpis(data.kpis, cmp?.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
+  try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
   try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
   try { renderCsat(data.kpis?.csat_promoter); } catch (e) { console.error('Error en renderCsat:', e); }
   try { renderPais(data.por_pais); } catch (e) { console.error('Error en renderPais:', e); }
 }
 
-// Compara un valor contra el mismo campo del periodo elegido para comparar.
-// higherIsBetter: true (más es mejor), false (menos es mejor), null (informativo, sin juicio).
-function deltaBadge(current, previous, opts) {
-  if (typeof current !== 'number' || typeof previous !== 'number') return '';
-  const decimals = opts.decimals ?? 0;
-  const diff = current - previous;
-  const flat = Math.abs(diff) < Math.pow(10, -decimals) / 2;
-  const up = diff > 0;
-  let cls = 'neu';
-  if (!flat && opts.higherIsBetter !== null) cls = (opts.higherIsBetter ? up : !up) ? 'up' : 'down';
-  const arrow = flat ? '→' : (up ? '↑' : '↓');
-  const sign = (!flat && up) ? '+' : '';
-  return `<div class="kpi-delta ${cls}">${arrow} ${sign}${diff.toFixed(decimals)}${opts.unit ?? ''} vs. periodo comparado</div>`;
-}
-
-function renderKpis(k, cmpK) {
+function renderKpis(k) {
   if (!k) return;
   const cards = [
-    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox',
-      delta: deltaBadge(k.volumen?.valor, cmpK?.volumen?.valor, { higherIsBetter: null, decimals: 0 }) },
-    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock',
-      delta: deltaBadge(k.tiempo_cierre_horas?.valor, cmpK?.tiempo_cierre_horas?.valor, { higherIsBetter: false, decimals: 1, unit: ' h' }) },
-    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat',
-      delta: deltaBadge(k.reopen?.valor_pct, cmpK?.reopen?.valor_pct, { higherIsBetter: false, decimals: 1, unit: ' pts' }) },
-    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target',
-      delta: deltaBadge(k.fcr?.valor_pct, cmpK?.fcr?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
-    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile',
-      delta: deltaBadge(k.csat_promoter?.valor_pct, cmpK?.csat_promoter?.valor_pct, { higherIsBetter: true, decimals: 1, unit: ' pts' }) },
+    { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox' },
+    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock' },
+    { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat' },
+    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
+    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
     <div class="kpi-card">
       <div class="kpi-icon-lucide"><i data-lucide="${c.icon}"></i></div>
       <div class="kpi-label">${c.label}</div>
       <div class="kpi-value ${c.vcls}">${c.value}</div>
-      ${c.delta || ''}
     </div>`).join('');
 }
 
