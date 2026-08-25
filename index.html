@@ -100,7 +100,7 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .filter-label { font-size: 10.5px; font-weight: 700; color: var(--slate-lt); letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
 .filter-select-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; background: #F1F5F9; color: var(--slate-lt); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); cursor: not-allowed; appearance: none; -webkit-appearance: none; }
 .filter-date-input { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: #fff; }
-.filter-date-input:disabled { color: var(--slate-lt); background: #F7F9FB; cursor: default; }
+.filter-date-static { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--slate); padding: 7px 2px; }
 .filter-arrow { color: var(--slate-lt); font-size: 13px; }
 .filter-apply-btn { margin-left: auto; padding: 9px 22px; border-radius: 8px; border: none; background: var(--teal); color: #fff; font-family: var(--font-head); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; }
 .filter-apply-btn:hover { background: var(--teal-dk); }
@@ -328,22 +328,31 @@ function setupRangeBar(history) {
       <span class="filter-label">Filtros</span>
       <span class="filter-select-pill filter-select-off">No disponible <span style="font-size:9px">▾</span></span>
       <span class="filter-label">Fecha</span>
-      <input type="date" class="filter-date-input" id="dateDesde" disabled>
+      <span class="filter-date-static" id="dateDesde"></span>
       <span class="filter-arrow">→</span>
       <input type="date" class="filter-date-input" id="dateHasta" min="${oldest}" max="${newest}" value="${newest}">
       <button type="button" class="filter-apply-btn" id="btnAplicarFiltro">Aplicar</button>
     </div>
-    <div class="filter-note">Filtro por país no disponible todavía — la mayoría de los tickets aún no tiene país registrado, así que filtrar por país daría una foto incompleta.</div>
+    <div class="filter-note">Elige la fecha de corte a la derecha: los indicadores siempre se acumulan desde el inicio del período hasta esa fecha. Filtro por país no disponible todavía — la mayoría de los tickets aún no tiene país registrado.</div>
   `;
 
-  const desdeInput = document.getElementById('dateDesde');
+  const desdeLabel = document.getElementById('dateDesde');
   const hastaInput = document.getElementById('dateHasta');
+
+  // Formatea 'YYYY-MM-DD' como '01 may 2026' (más legible que un input de
+  // fecha deshabilitado, que se lee como un control roto).
+  function fechaLegible(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${d} ${meses[Number(m) - 1]} ${y}`;
+  }
 
   function apply() {
     const hastaIdx = nearestSnapshotIdx(sorted, hastaInput.value);
     const primary = sorted[hastaIdx];
     if (!primary) return;
-    desdeInput.value = primary.meta?.periodo?.inicio || oldest;
+    desdeLabel.textContent = fechaLegible(primary.meta?.periodo?.inicio || oldest);
     runRender(primary);
   }
 
