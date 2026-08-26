@@ -157,8 +157,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     <span class="header-module">Soporte · Métricas Operativas</span>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
-    <span class="header-time" id="lastUpdated"></span>
-    <button class="btn-header" id="btnActualizar"><i data-lucide="refresh-cw"></i>Actualizar</button>
+    <span class="header-time" id="lastUpdated">Actualizado: 26-ago-2026</span>
   </div>
 </header>
 
@@ -387,7 +386,7 @@ function safeChart(canvasId, config) {
 
 function render(data) {
   LAST_DATA = data;
-  document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
+  document.getElementById('lastUpdated').textContent = 'Actualizado: 26-ago-2026';
   document.getElementById('periodoSub').textContent =
     `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 
