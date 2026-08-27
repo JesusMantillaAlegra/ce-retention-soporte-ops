@@ -93,12 +93,11 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .filter-bar { background: #FFFFFF; border: 1px solid #EDF1F5; border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(26,43,74,0.04); }
 .filter-bar-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .filter-label { font-size: 10.5px; font-weight: 700; color: var(--slate-lt); letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
-.filter-select-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; background: #F1F5F9; color: var(--slate-lt); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); cursor: not-allowed; appearance: none; -webkit-appearance: none; }
 .filter-date-input { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--dark); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: #fff; }
-.filter-date-static { font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--slate); padding: 7px 2px; }
-.filter-arrow { color: var(--slate-lt); font-size: 13px; }
 .filter-apply-btn { margin-left: auto; padding: 9px 22px; border-radius: 8px; border: none; background: var(--teal); color: #fff; font-family: var(--font-head); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; }
 .filter-apply-btn:hover { background: var(--teal-dk); }
+.filter-apply-btn:disabled { background: #CBD5E1; cursor: default; }
+.filter-status { font-size: 12px; font-weight: 600; color: var(--slate-lt); font-variant-numeric: tabular-nums; }
 .filter-note { font-size: 11px; font-style: italic; color: var(--slate-lt); margin-top: 10px; }
 
 /* Grids */
@@ -162,7 +161,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
       <div class="sidebar-label">VISTAS</div>
     </div>
     <nav class="sidebar-nav">
-      <a class="nav-item active"><i data-lucide="headset"></i><span>Soporte<small>Reopen · FCR · Cierre</small></span></a>
+      <a class="nav-item active"><i data-lucide="headset"></i><span>Tickets Soporte<small>Reopen · FCR · Cierre</small></span></a>
     </nav>
   </aside>
 
@@ -199,27 +198,27 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 
   <hr class="section-divider">
 
-  <!-- ── SECCIÓN 3: PAÍS ── -->
-  <div class="section-label">Corte geográfico</div>
-  <div class="section-title">Tiempo de cierre por país</div>
-  <div class="section-sub">Volumen y horas de cierre por país, actualizado automáticamente cada semana</div>
+  <!-- ── SECCIÓN 3: VERSIÓN ── -->
+  <div class="section-label">Distribución</div>
+  <div class="section-title">Tickets por versión</div>
+  <div class="section-sub">Volumen y horas de cierre por versión, actualizado en vivo</div>
 
   <div class="chart-grid-2" style="margin-bottom:20px">
     <div class="chart-card">
       <div class="chart-card-title">Horas promedio hasta cierre</div>
-      <div class="chart-card-sub">Por país</div>
-      <div class="chart-wrap"><canvas id="chartCountry"></canvas></div>
+      <div class="chart-card-sub">Por versión</div>
+      <div class="chart-wrap"><canvas id="chartVersion"></canvas></div>
     </div>
     <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
       <div class="table-header">
         <div>
-          <h3>Detalle por país</h3>
+          <h3>Detalle por versión</h3>
         </div>
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>País</th><th>Tickets</th><th>% del total</th><th>Cierre prom.</th></tr></thead>
-          <tbody id="paisTableBody"></tbody>
+          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th><th>Cierre prom.</th></tr></thead>
+          <tbody id="versionTableBody"></tbody>
         </table>
       </div>
     </div>
@@ -302,140 +301,101 @@ function mostrarError(titulo, detalle) {
   fb.style.display = 'block';
 }
 
-// Se piden las dos cosas juntas: la foto EN VIVO y el histórico. Van juntas a
-// propósito — el filtro de fecha necesita conocer ambas para armarse bien.
+// ── Carga de datos y filtro de fechas ─────────────────────────────────────
 //
-// El histórico es opcional: si falla, el tablero igual muestra la foto en vivo
-// (solo sin poder mirar periodos pasados). La foto en vivo NO es opcional: sin
-// ella no hay nada que mostrar.
-Promise.all([
-  fetch(`${API_BASE}/api/metrics`)
-    .then(async r => {
-      const cuerpo = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(cuerpo?.detalle || cuerpo?.error || `HTTP ${r.status}`);
-      return cuerpo;
-    })
-    .catch(e => {
-      // No se corta acá: puede que el histórico sirva como respaldo.
-      console.error('Error al cargar las métricas en vivo:', e);
-      return { _error: e.message };
-    }),
-  fetch(`${API_BASE}/api/history`)
-    .then(r => (r.ok ? r.json() : []))
-    .catch(e => {
-      console.warn('No se pudo cargar el histórico:', e);
-      return [];
-    }),
-]).then(([envivo, historico]) => {
-  const snapshots = Array.isArray(historico) ? historico : [];
+// Reactivo: cambiar Desde u Hasta dispara la consulta solo (con un pequeño
+// debounce), sin botón "Aplicar". Por defecto el rango es el año en curso
+// completo (1-ene hasta hoy) — el año anterior se consulta moviendo "Desde".
+const fmtISO = (d) => d.toISOString().slice(0, 10);
 
-  // Diagnóstico para quien mantiene el tablero — a propósito solo en la
-  // consola, no en pantalla: esto lo ven jefes y un cartel de advertencia
-  // genera más ruido que valor.
-  if (envivo?._avisos?.length) {
-    console.warn('Datos parcialmente desactualizados:', envivo._avisos);
-  }
-
-  if (!envivo?._error) {
-    setupRangeBar(envivo, snapshots);
-    return;
-  }
-
-  // El endpoint en vivo falló. Antes de rendirse: si hay histórico, se muestra
-  // el snapshot más reciente. Es data vieja, pero infinitamente mejor que una
-  // pantalla en blanco.
-  if (snapshots.length) {
-    console.warn('Mostrando el último snapshot guardado porque el servicio en vivo no respondió.');
-    const ordenados = snapshots.slice().sort((a, b) =>
-      (b.snapshot_id || '').localeCompare(a.snapshot_id || '')
-    );
-    setupRangeBar(ordenados[0], ordenados.slice(1));
-    return;
-  }
-
-  mostrarError(
-    'No se pudieron cargar los datos',
-    `El servicio de métricas no respondió y no hay datos guardados para mostrar.<br><br>` +
-    `<code>${envivo._error}</code>`
-  );
-});
-
-// ── Periodos disponibles: la foto EN VIVO (hoy) más los snapshots que el cron
-// semanal de Vercel fue guardando (nunca pisa los anteriores).
-//
-// El filtro de fecha elige qué periodo mostrar: el más reciente cuya fecha sea
-// <= la fecha "Hasta" elegida. Elegir hoy = datos en vivo; elegir una fecha
-// pasada = el snapshot que estaba vigente ese día. "Desde" es informativo —
-// muestra el inicio real del período de esa foto, no es editable.
-function nearestSnapshotIdx(sorted, dateStr) {
-  if (!dateStr) return 0;
-  for (let i = 0; i < sorted.length; i++) {
-    if ((sorted[i].snapshot_id || '') <= dateStr) return i;
-  }
-  return sorted.length - 1;
+function hoyISO() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+    .toLocaleDateString('sv-SE');
 }
 
-function setupRangeBar(envivo, history) {
+function inicioAnioActualISO() {
+  return `${hoyISO().slice(0, 4)}-01-01`;
+}
+
+function fechaLegible(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${d} ${meses[Number(m) - 1]} ${y}`;
+}
+
+function construirBarraFiltros() {
   const container = document.getElementById('rangeBar');
-  if (!container) return;
+  if (!container) return null;
+  const hoy = hoyISO();
 
-  // La foto en vivo se etiqueta con la fecha de corte de su propio período,
-  // y se marca para poder distinguirla de un snapshot guardado.
-  const hoyId = envivo?.meta?.periodo?.fin || new Date().toISOString().slice(0, 10);
-  const enVivoEntry = { ...envivo, snapshot_id: hoyId, _envivo: true };
-
-  // Se descarta cualquier snapshot con la misma fecha que la foto en vivo: la
-  // versión en vivo siempre es más fresca que la guardada del mismo día.
-  const previos = (Array.isArray(history) ? history : []).filter((h) => h.snapshot_id !== hoyId);
-  const sorted = [enVivoEntry, ...previos].sort((a, b) =>
-    (b.snapshot_id || '').localeCompare(a.snapshot_id || '')
-  );
-
-  const oldest = sorted[sorted.length - 1].snapshot_id;
-  const newest = sorted[0].snapshot_id;
   container.className = 'filter-bar';
   container.innerHTML = `
     <div class="filter-bar-row">
-      <span class="filter-label">Filtros</span>
-      <span class="filter-select-pill filter-select-off">No disponible <span style="font-size:9px">▾</span></span>
-      <span class="filter-label">Fecha</span>
-      <span class="filter-date-static" id="dateDesde"></span>
-      <span class="filter-arrow">→</span>
-      <input type="date" class="filter-date-input" id="dateHasta" min="${oldest}" max="${newest}" value="${newest}">
-      <button type="button" class="filter-apply-btn" id="btnAplicarFiltro">Aplicar</button>
+      <span class="filter-label">Desde</span>
+      <input type="date" class="filter-date-input" id="dateDesde" max="${hoy}" value="${inicioAnioActualISO()}">
+      <span class="filter-label">Hasta</span>
+      <input type="date" class="filter-date-input" id="dateHasta" max="${hoy}" value="${hoy}">
+      <span class="filter-status" id="filtroEstado"></span>
     </div>
-    <div class="filter-note">Elige la fecha de corte a la derecha: los indicadores siempre se acumulan desde el inicio del período hasta esa fecha. Filtro por país no disponible todavía — la mayoría de los tickets aún no tiene país registrado.</div>
+    <div class="filter-note">Los indicadores se recalculan solos al cambiar la fecha, contando los tickets creados entre esas dos fechas.</div>
   `;
-
-  const desdeLabel = document.getElementById('dateDesde');
-  const hastaInput = document.getElementById('dateHasta');
-
-  // Formatea 'YYYY-MM-DD' como '01 may 2026' (más legible que un input de
-  // fecha deshabilitado, que se lee como un control roto).
-  function fechaLegible(iso) {
-    if (!iso) return '—';
-    const [y, m, d] = iso.split('-');
-    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-    return `${d} ${meses[Number(m) - 1]} ${y}`;
-  }
-
-  function apply() {
-    const hastaIdx = nearestSnapshotIdx(sorted, hastaInput.value);
-    const primary = sorted[hastaIdx];
-    if (!primary) return;
-    desdeLabel.textContent = fechaLegible(primary.meta?.periodo?.inicio || oldest);
-    runRender(primary);
-    // Al mirar un periodo pasado se avisa en el header, para que nadie lea un
-    // snapshot viejo creyendo que son los números de hoy.
-    const lu = document.getElementById('lastUpdated');
-    if (lu && !primary._envivo) {
-      lu.textContent = `Viendo el periodo cerrado al ${fechaLegible(primary.snapshot_id)}`;
-    }
-  }
-
-  document.getElementById('btnAplicarFiltro').addEventListener('click', apply);
-  apply();
+  return container;
 }
+
+async function cargar(desde, hasta) {
+  const estado = document.getElementById('filtroEstado');
+  if (estado) estado.textContent = 'Consultando…';
+
+  const params = new URLSearchParams();
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+
+  try {
+    const r = await fetch(`${API_BASE}/api/metrics?${params}`);
+    const cuerpo = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(cuerpo?.detalle || cuerpo?.error || `HTTP ${r.status}`);
+
+    runRender(cuerpo);
+    if (estado) {
+      estado.textContent = `${fechaLegible(cuerpo.meta?.periodo?.inicio)} → ${fechaLegible(cuerpo.meta?.periodo?.fin)}`;
+    }
+  } catch (e) {
+    console.error('Error al cargar las métricas:', e);
+    if (estado) estado.textContent = '';
+    mostrarError(
+      'No se pudieron cargar los datos',
+      `El servicio de métricas no respondió.<br><br><code>${e.message}</code>`
+    );
+  }
+}
+
+(function iniciar() {
+  const barra = construirBarraFiltros();
+  if (!barra) return;
+  const desdeInput = document.getElementById('dateDesde');
+  const hastaInput = document.getElementById('dateHasta');
+  const estado = document.getElementById('filtroEstado');
+
+  // Debounce corto: evita disparar una consulta por cada tecla/click mientras
+  // el usuario todavía está seleccionando la fecha en el date picker.
+  let temporizador;
+  function onCambioFecha() {
+    const desde = desdeInput.value;
+    const hasta = hastaInput.value;
+    if (desde && hasta && desde > hasta) {
+      if (estado) estado.textContent = 'La fecha inicial es posterior a la final';
+      return;
+    }
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => cargar(desde, hasta), 300);
+  }
+
+  desdeInput.addEventListener('change', onCambioFecha);
+  hastaInput.addEventListener('change', onCambioFecha);
+
+  cargar(desdeInput.value, hastaInput.value);
+})();
 
 function safeChart(canvasId, config) {
   const el = document.getElementById(canvasId);
@@ -468,8 +428,8 @@ function render(data) {
 
   try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
   try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
-  try { renderCsat(data.kpis?.csat_promoter); } catch (e) { console.error('Error en renderCsat:', e); }
-  try { renderPais(data.por_pais); } catch (e) { console.error('Error en renderPais:', e); }
+  try { renderCsat(data.kpis?.csat); } catch (e) { console.error('Error en renderCsat:', e); }
+  try { renderVersion(data.por_version); } catch (e) { console.error('Error en renderVersion:', e); }
 }
 
 function renderKpis(k) {
@@ -479,7 +439,7 @@ function renderKpis(k) {
     { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock' },
     { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat' },
     { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
-    { label: 'CSAT (Promoter)', value: (k.csat_promoter?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
+    { label: 'CSAT', value: (k.csat?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
     <div class="kpi-card">
@@ -516,40 +476,36 @@ function renderWeekly(t) {
 function renderCsat(c) {
   if (!c) return;
   document.getElementById('csatSub').textContent = `De los tickets con encuesta respondida (${fmt(c.total_respuestas)})`;
+  // Barras VERTICALES, orden fijo en el eje X: Detractor, Neutro, Promotor
+  // (pedido explícito de Lauren — no alfabético, no por tamaño de barra).
   safeChart('chartCsat', {
     type: 'bar',
     data: {
-      labels: ['Promoter', 'Passive', 'Detractor'],
-      datasets: [{ label: 'Tickets', data: [c.promoter, c.passive, c.detractor], backgroundColor: ['#22C55E', '#F5A623', '#EF4444'], borderRadius: 4, maxBarThickness: 34 }],
+      labels: ['Detractor', 'Neutro', 'Promotor'],
+      datasets: [{ label: 'Tickets', data: [c.detractor, c.passive, c.promoter], backgroundColor: ['#EF4444', '#F5A623', '#22C55E'], borderRadius: 4, maxBarThickness: 60 }],
     },
     options: {
-      indexAxis: 'y', maintainAspectRatio: false,
-      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      maintainAspectRatio: false,
+      scales: { y: { grid: { color: '#F0F4F8' } }, x: { grid: { display: false } } },
       plugins: { legend: { display: false } },
     },
   });
 }
 
-function renderPais(rows) {
+function renderVersion(rows) {
   if (!rows) return;
-  const tbody = document.getElementById('paisTableBody');
+  const tbody = document.getElementById('versionTableBody');
   tbody.innerHTML = rows.map(r => {
-    const paisCell = r.pais === 'Sin país' ? '<span class="badge badge-gray">Sin país</span>' : r.pais;
-    const cierreBadge = r.cierre_horas >= 90 ? `<span class="badge badge-red">${r.cierre_horas.toFixed(1)} h</span>`
-      : r.cierre_horas <= 15 ? `<span class="badge badge-green">${r.cierre_horas.toFixed(1)} h</span>`
-      : `${r.cierre_horas.toFixed(1)} h`;
-    return `<tr><td>${paisCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${cierreBadge}</td></tr>`;
+    const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
+    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${r.cierre_horas.toFixed(1)} h</td></tr>`;
   }).join('');
 
-  const excludingNoCountry = rows.filter(r => r.pais !== 'Sin país');
-  safeChart('chartCountry', {
+  const conVersion = rows.filter(r => r.version !== 'Sin versión').slice().sort((a, b) => b.cierre_horas - a.cierre_horas);
+  safeChart('chartVersion', {
     type: 'bar',
     data: {
-      labels: excludingNoCountry.map(r => r.pais).sort((a, b) => {
-        const ra = excludingNoCountry.find(r => r.pais === a), rb = excludingNoCountry.find(r => r.pais === b);
-        return rb.cierre_horas - ra.cierre_horas;
-      }),
-      datasets: [{ label: 'Horas prom. cierre', data: excludingNoCountry.slice().sort((a, b) => b.cierre_horas - a.cierre_horas).map(r => r.cierre_horas), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
+      labels: conVersion.map(r => r.version),
+      datasets: [{ label: 'Horas prom. cierre', data: conVersion.map(r => r.cierre_horas), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
     },
     options: {
       indexAxis: 'y', maintainAspectRatio: false,

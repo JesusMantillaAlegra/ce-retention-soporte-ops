@@ -1,55 +1,42 @@
 // GET /api/diagnostico
 //
 // Revisa una por una las piezas de la configuración y dice cuál falla y por
-// qué. Existe porque este sistema depende de 4 cosas externas (token de
-// HubSpot, URL de Metabase, API key de Metabase, store de KV) y cuando algo
-// no anda, un 500 genérico en /api/metrics no dice cuál de las 4 es.
+// qué. Ya no depende de Metabase (ver MAPEO_CAMPOS_TABLA.md) — todo sale de
+// HubSpot, así que las piezas externas son: token de HubSpot, propiedad de
+// CSAT, y el store de KV para el histórico.
 //
 // Es el primer endpoint a abrir después de desplegar.
 //
 // No expone valores de secretos, solo si están presentes y si funcionan.
 
-import { resolveSchema } from '../lib/metabase.mjs';
-import { fetchHubspotMetrics } from '../lib/hubspot.mjs';
+import { fetchHubspotMetrics, fetchCsat } from '../lib/hubspot.mjs';
 import { leerHistorico } from '../lib/store.mjs';
-import { PERIOD_START } from '../lib/metrics.mjs';
 
 const ok = (detalle) => ({ estado: 'ok', detalle });
 const falla = (e) => ({ estado: 'falla', detalle: String(e?.message ?? e) });
+
+function inicioAnioActual() {
+  return `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
 
   const checks = {};
+  const periodStart = inicioAnioActual();
+  const periodEnd = new Date().toISOString();
 
   // 1) ¿Están definidas las variables de entorno?
-  const requeridas = ['HUBSPOT_TOKEN', 'METABASE_URL', 'CRON_SECRET'];
+  const requeridas = ['HUBSPOT_TOKEN', 'CRON_SECRET', 'HUBSPOT_CSAT_PROPERTY'];
   const faltantes = requeridas.filter((v) => !process.env[v]);
-
-  // Metabase acepta dos formas de autenticación; basta con tener una.
-  const tieneApiKey = !!process.env.METABASE_API_KEY;
-  const tieneUsuario = !!(process.env.METABASE_USER && process.env.METABASE_PASSWORD);
-  if (!tieneApiKey && !tieneUsuario) {
-    faltantes.push('METABASE_API_KEY (o bien METABASE_USER + METABASE_PASSWORD)');
-  }
-
   checks.variables_entorno = faltantes.length
     ? { estado: 'falla', detalle: `Faltan: ${faltantes.join(', ')}` }
-    : ok(
-        `Definidas. Metabase autentica por ${tieneApiKey ? 'API key' : 'usuario y contraseña'}` +
-        (tieneApiKey && !process.env.METABASE_API_KEY.startsWith('mb_')
-          ? ' — OJO: la key no empieza con "mb_", que es el formato de las API keys de Metabase. Puede que no sea una API key válida.'
-          : '')
-      );
+    : ok('Definidas. HUBSPOT_OWNER_LUCIA es opcional (sin ella, no se excluye la gestión de Lucía).');
 
   // 2) HubSpot responde y los filtros devuelven algo razonable
   try {
-    const hs = await fetchHubspotMetrics({
-      token: process.env.HUBSPOT_TOKEN,
-      periodStart: PERIOD_START,
-      periodEnd: new Date().toISOString(),
-    });
+    const hs = await fetchHubspotMetrics({ token: process.env.HUBSPOT_TOKEN, periodStart, periodEnd });
     checks.hubspot = ok(
       `volumen=${hs.volumen}, reopen=${hs.reopen}, cerrados=${hs.cerrados}, fcr=${hs.fcr}`
     );
@@ -57,14 +44,12 @@ export default async function handler(req, res) {
     checks.hubspot = falla(e);
   }
 
-  // 3) Metabase responde y encontramos la tabla y sus columnas
+  // 3) La propiedad de CSAT existe y devuelve datos
   try {
-    const s = await resolveSchema();
-    checks.metabase = ok(
-      `base id=${s.databaseId}, tabla id=${s.tableId}, ${Object.keys(s.fields).length} columnas resueltas`
-    );
+    const csat = await fetchCsat({ token: process.env.HUBSPOT_TOKEN, periodStart, periodEnd });
+    checks.csat = ok(`csat=${csat.csat_pct}% sobre ${csat.total_respuestas} respuestas`);
   } catch (e) {
-    checks.metabase = falla(e);
+    checks.csat = falla(e);
   }
 
   // 4) El store del histórico está conectado

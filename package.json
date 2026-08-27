@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Dashboard de metricas operativas de soporte (CE-Retention). Los datos se traen en vivo de HubSpot y Metabase via endpoints serverless en Vercel.",
+  "description": "Dashboard de metricas operativas de soporte (CE-Retention). Los datos se traen en vivo de HubSpot via endpoints serverless en Vercel.",
   "engines": {
     "node": ">=18"
   }
