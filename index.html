@@ -291,7 +291,11 @@ function runRender(data) {
 const API_BASE = '';
 
 function mostrarError(titulo, detalle) {
-  document.getElementById('ce-main').style.display = 'none';
+  // Se oculta toda la app (no solo el main): el sidebar mide 100vh, así que si
+  // se deja visible empuja el mensaje de error por debajo del fondo de la
+  // página y el usuario ve una pantalla en blanco sin explicación.
+  const app = document.querySelector('.app-body');
+  if (app) app.style.display = 'none';
   const fb = document.getElementById('fallback');
   fb.innerHTML = `<h2>${titulo}</h2><p>${detalle}</p>`;
   fb.style.display = 'block';
@@ -304,38 +308,56 @@ function mostrarError(titulo, detalle) {
 // (solo sin poder mirar periodos pasados). La foto en vivo NO es opcional: sin
 // ella no hay nada que mostrar.
 Promise.all([
-  fetch(`${API_BASE}/api/metrics`).then(async r => {
-    const cuerpo = await r.json().catch(() => null);
-    if (!r.ok) throw new Error(cuerpo?.detalle || cuerpo?.error || `HTTP ${r.status}`);
-    return cuerpo;
-  }),
+  fetch(`${API_BASE}/api/metrics`)
+    .then(async r => {
+      const cuerpo = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(cuerpo?.detalle || cuerpo?.error || `HTTP ${r.status}`);
+      return cuerpo;
+    })
+    .catch(e => {
+      // No se corta acá: puede que el histórico sirva como respaldo.
+      console.error('Error al cargar las métricas en vivo:', e);
+      return { _error: e.message };
+    }),
   fetch(`${API_BASE}/api/history`)
     .then(r => (r.ok ? r.json() : []))
     .catch(e => {
-      console.warn('No se pudo cargar el histórico (solo se ve la foto actual):', e);
+      console.warn('No se pudo cargar el histórico:', e);
       return [];
     }),
-])
-  .then(([envivo, historico]) => {
-    // El endpoint devuelve los datos igual cuando algo se ve raro, pero
-    // marcados. Se pintan (mejor eso que una pantalla en blanco) y se deja
-    // el aviso en consola para quien mantenga el tablero.
-    if (envivo._advertencias?.length) {
-      console.warn('El API devolvió advertencias sobre estos datos:', envivo._advertencias);
-    }
-    // La foto en vivo entra al selector como un periodo más, el de "hoy", y
-    // queda seleccionada por defecto. Antes esto era un bug: el histórico se
-    // cargaba después y sobrescribía la foto en vivo con el último snapshot
-    // guardado, así que los datos del momento nunca se veían.
-    setupRangeBar(envivo, Array.isArray(historico) ? historico : []);
-  })
-  .catch(e => {
-    console.error('Error al cargar las métricas desde el API:', e);
-    mostrarError(
-      'No se pudieron cargar los datos',
-      `No hubo respuesta del servicio de métricas. Detalle: <code>${e.message}</code>`
+]).then(([envivo, historico]) => {
+  const snapshots = Array.isArray(historico) ? historico : [];
+
+  // Diagnóstico para quien mantiene el tablero — a propósito solo en la
+  // consola, no en pantalla: esto lo ven jefes y un cartel de advertencia
+  // genera más ruido que valor.
+  if (envivo?._avisos?.length) {
+    console.warn('Datos parcialmente desactualizados:', envivo._avisos);
+  }
+
+  if (!envivo?._error) {
+    setupRangeBar(envivo, snapshots);
+    return;
+  }
+
+  // El endpoint en vivo falló. Antes de rendirse: si hay histórico, se muestra
+  // el snapshot más reciente. Es data vieja, pero infinitamente mejor que una
+  // pantalla en blanco.
+  if (snapshots.length) {
+    console.warn('Mostrando el último snapshot guardado porque el servicio en vivo no respondió.');
+    const ordenados = snapshots.slice().sort((a, b) =>
+      (b.snapshot_id || '').localeCompare(a.snapshot_id || '')
     );
-  });
+    setupRangeBar(ordenados[0], ordenados.slice(1));
+    return;
+  }
+
+  mostrarError(
+    'No se pudieron cargar los datos',
+    `El servicio de métricas no respondió y no hay datos guardados para mostrar.<br><br>` +
+    `<code>${envivo._error}</code>`
+  );
+});
 
 // ── Periodos disponibles: la foto EN VIVO (hoy) más los snapshots que el cron
 // semanal de Vercel fue guardando (nunca pisa los anteriores).

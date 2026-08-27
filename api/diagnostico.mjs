@@ -24,11 +24,24 @@ export default async function handler(req, res) {
   const checks = {};
 
   // 1) ¿Están definidas las variables de entorno?
-  const requeridas = ['HUBSPOT_TOKEN', 'METABASE_URL', 'METABASE_API_KEY', 'CRON_SECRET'];
+  const requeridas = ['HUBSPOT_TOKEN', 'METABASE_URL', 'CRON_SECRET'];
   const faltantes = requeridas.filter((v) => !process.env[v]);
+
+  // Metabase acepta dos formas de autenticación; basta con tener una.
+  const tieneApiKey = !!process.env.METABASE_API_KEY;
+  const tieneUsuario = !!(process.env.METABASE_USER && process.env.METABASE_PASSWORD);
+  if (!tieneApiKey && !tieneUsuario) {
+    faltantes.push('METABASE_API_KEY (o bien METABASE_USER + METABASE_PASSWORD)');
+  }
+
   checks.variables_entorno = faltantes.length
     ? { estado: 'falla', detalle: `Faltan: ${faltantes.join(', ')}` }
-    : ok('Las 4 variables están definidas');
+    : ok(
+        `Definidas. Metabase autentica por ${tieneApiKey ? 'API key' : 'usuario y contraseña'}` +
+        (tieneApiKey && !process.env.METABASE_API_KEY.startsWith('mb_')
+          ? ' — OJO: la key no empieza con "mb_", que es el formato de las API keys de Metabase. Puede que no sea una API key válida.'
+          : '')
+      );
 
   // 2) HubSpot responde y los filtros devuelven algo razonable
   try {

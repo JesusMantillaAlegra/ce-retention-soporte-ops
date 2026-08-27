@@ -31,6 +31,17 @@ export default async function handler(req, res) {
     const data = await buildMetrics();
     const problemas = validarMetrics(data);
 
+    // Un payload PARCIAL (ej. Metabase caído, con valores de respaldo) sirve
+    // para mostrar en pantalla, pero NO para guardarse en el histórico:
+    // quedaría un snapshot con datos repetidos de una fecha anterior haciéndose
+    // pasar por la foto de hoy, y eso arruina toda comparación futura.
+    if (data._avisos?.length) {
+      return res.status(422).json({
+        error: 'Los datos venían incompletos — NO se guardó el snapshot',
+        avisos: data._avisos,
+      });
+    }
+
     // Acá sí se corta: un snapshot es permanente y va a quedar en el
     // histórico para siempre. Es mucho peor guardar una foto rota (que después
     // ensucia todas las comparaciones mes a mes) que saltarse una semana.
