@@ -86,6 +86,7 @@ WHERE pipeline IN (lista_pipelines_soporte)
 `FCR (%) = (resueltos_1er_contacto ÷ total_cerrados) × 100`
 
 ### Satisfacción (CSAT)
+Propiedad de HubSpot: **`clasificacion_encuesta_ces_csat`** (nombre interno confirmado en Configuración → Propiedades → Tickets, 27-ago-2026). Los valores que guarda esta propiedad están en inglés: `Promoter`, `Passive`, `Detractor`.
 ```sql
 SELECT AVG(csat_property) AS csat_pct
 FROM tickets
@@ -93,10 +94,10 @@ WHERE pipeline IN (lista_pipelines_soporte)
   AND csat_property IS NOT NULL
   AND fecha_ultima_encuesta_csat >= 1-ene-[año];
 ```
-`CSAT (%) = valor directo de la propiedad`
+`CSAT (%) = Promoter ÷ (Promoter + Passive + Detractor) × 100`
 
 ### Distribución CSAT
-Gráfico de barras **verticales**. El eje X siempre en este orden fijo, de izquierda a derecha: **Detractor, Neutro, Promotor** (no alfabético, no por tamaño de barra).
+Gráfico de barras **verticales**. El eje X siempre en este orden fijo, de izquierda a derecha: **Detractor, Neutro (Passive), Promotor** (no alfabético, no por tamaño de barra). Las etiquetas del eje se muestran en español; el valor almacenado en HubSpot es el inglés (`Detractor`, `Passive`, `Promoter`).
 ```sql
 SELECT csat_classification, COUNT(*) AS total
 FROM tickets
@@ -106,8 +107,8 @@ WHERE pipeline IN (lista_pipelines_soporte)
 GROUP BY csat_classification
 ORDER BY CASE csat_classification
   WHEN 'Detractor' THEN 1
-  WHEN 'Neutro' THEN 2
-  WHEN 'Promotor' THEN 3
+  WHEN 'Passive' THEN 2
+  WHEN 'Promoter' THEN 3
 END;
 ```
 `% categoría = COUNT(categoría) ÷ COUNT(total respuestas) × 100`
