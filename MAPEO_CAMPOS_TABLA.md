@@ -15,6 +15,29 @@ AND createdate >= 1-ene-[año actual]          -- dinámico, permite consultar h
 AND hubspot_owner_id != owner_lucia            -- excluye la gestión de la asistente automatizada
 ```
 
+**Nota técnica (confirmado 27-ago-2026 vía HubSpot MCP):** la propiedad real en el objeto Ticket es `hs_pipeline`, no `pipeline` (esa no existe), y sus valores son los IDs numéricos del pipeline, no el nombre. Los 18 nombres de arriba se traducen a estos IDs:
+
+| Pipeline | ID |
+|---|---|
+| MEX_Sup | 1857352 |
+| Acrecer_Sup | 2238445 |
+| COL_Sup | 1857341 |
+| Premium Sup (No transferir) | 2236512 |
+| Nómina_Sup | 1940485 |
+| Alianza de Pagos y Fintech | 1940463 |
+| Dentalink | 1940496 |
+| DOM_Sup | 1857358 |
+| Payments Sup | 1855951 |
+| POS_Sup | 1940490 |
+| Innpulsa_Sup | 1936983 |
+| Consultas API_Sup | 38406328 |
+| Solicitudes Partners_Sup | 97373833 |
+| Customer support | 745378666 |
+| Contador Sup | 1940479 |
+| Plan Fundaciones y Educación | 1940502 |
+| Alegra Tienda_Sup | 2236244 |
+| Integraciones_Sup | 99256347 |
+
 ---
 
 ## Métricas
@@ -25,9 +48,9 @@ AND hubspot_owner_id != owner_lucia            -- excluye la gestión de la asis
 | Tiempo de cierre promedio (8,9 días) | `createdate`, `closed_date`, `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | Excluir tickets con cualquiera de las dos propiedades de reopen pobladas |
 | Tasa de reapertura — 3,3% (1.510 / 45.321) | `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | `reopen__retroactivo_tema_diferente = 'Nueva consulta' OR ticket_reabierto__wf = 'Nueva consulta'` |
 | Resolución en primer contacto (FCR) | `closed_date`, `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | Numerador: `closed_date HAS_PROPERTY` + ninguna de las dos propiedades de reopen marcada como `'Nueva consulta'` (no es lo mismo que "vacías": un ticket puede tener la propiedad poblada con `'Cierre agradecimiento'` o `'Ambiguo'` y sigue contando como resuelto en primer contacto). Denominador: `closed_date HAS_PROPERTY` |
-| Satisfacción (CSAT) — ~83-84% (varía según el momento de consulta) | `csat_property`, `fecha_ultima_encuesta_csat` | `csat_property IS NOT NULL` + `fecha_ultima_encuesta_csat >= 1-ene-[año]` |
+| Satisfacción (CSAT) — ~83-84% (varía según el momento de consulta) | `csat_property`, `fecha_de_la_ultima_encuestra_ces_csat` | `csat_property IS NOT NULL` + `fecha_de_la_ultima_encuestra_ces_csat >= 1-ene-[año]` |
 | Distribución CSAT (Detractor, Neutro, Promotor) | Misma propiedad de CSAT | Mismo filtro que CSAT — gráfico aparte, no alimenta el KPI principal. Barras **verticales**, eje X en este orden fijo: **Detractor, Neutro, Promotor** |
-| Distribución por versión | `hd_version` | Ninguno adicional |
+| Distribución por versión | `version` | Ninguno adicional |
 | Tendencia semanal | `createdate`, `closed_date` | Ninguno adicional |
 
 ---
@@ -92,7 +115,7 @@ SELECT AVG(csat_property) AS csat_pct
 FROM tickets
 WHERE pipeline IN (lista_pipelines_soporte)
   AND csat_property IS NOT NULL
-  AND fecha_ultima_encuesta_csat >= 1-ene-[año];
+  AND fecha_de_la_ultima_encuestra_ces_csat >= 1-ene-[año];
 ```
 `CSAT (%) = Promoter ÷ (Promoter + Passive + Detractor) × 100`
 
@@ -103,7 +126,7 @@ SELECT csat_classification, COUNT(*) AS total
 FROM tickets
 WHERE pipeline IN (lista_pipelines_soporte)
   AND csat_property IS NOT NULL
-  AND fecha_ultima_encuesta_csat >= 1-ene-[año]
+  AND fecha_de_la_ultima_encuestra_ces_csat >= 1-ene-[año]
 GROUP BY csat_classification
 ORDER BY CASE csat_classification
   WHEN 'Detractor' THEN 1
@@ -115,14 +138,14 @@ END;
 
 ### Distribución por versión
 ```sql
-SELECT hd_version AS version, COUNT(*) AS tickets,
+SELECT version AS version, COUNT(*) AS tickets,
   AVG(closed_date - createdate) AS cierre_promedio
 FROM tickets
 WHERE pipeline IN (lista_pipelines_soporte)
   AND createdate >= 1-ene-[año]
-GROUP BY hd_version;
+GROUP BY version;
 ```
-`Tickets(versión) = COUNT(tickets WHERE hd_version = v)`
+`Tickets(versión) = COUNT(tickets WHERE version = v)`
 
 ### Tendencia semanal
 ```sql
@@ -142,4 +165,4 @@ GROUP BY 1 ORDER BY 1;
 
 - Tiempo de cierre: fuente única HubSpot (`createdate`/`closed_date`), ya no Metabase.
 - CSAT: se calcula sobre encuestas con clasificación conocida ("CSAT es conocido"), filtrado por fecha de la encuesta.
-- Distribución por versión: fuente `hd_version` a nivel de ticket.
+- Distribución por versión: fuente `version` a nivel de ticket.
