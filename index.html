@@ -252,6 +252,11 @@ try {
 } catch (e) { console.error('Error inicializando Chart.js:', e); }
 
 const fmt = n => typeof n === 'number' ? n.toLocaleString('es-CO') : (n ?? '—');
+// Umbral pedido: por debajo de 72 h se muestra en horas, desde 72 h en días.
+const fmtDuracion = (horas) => {
+  if (typeof horas !== 'number') return '—';
+  return horas < 72 ? `${horas.toFixed(1)} h` : `${(horas / 24).toFixed(1)} días`;
+};
 
 // Fecha de hoy en hora Bogotá, con el formato del header (ej. "27-ago-2026").
 // La usa el header mientras la fecha de actualización esté fijada a hoy — ver
@@ -436,7 +441,7 @@ function renderKpis(k) {
   if (!k) return;
   const cards = [
     { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox' },
-    { label: 'Tiempo de cierre promedio', value: (k.tiempo_cierre_horas?.valor ?? '—') + ' h', vcls: 'v-teal', icon: 'clock' },
+    { label: 'Tiempo de cierre promedio', value: fmtDuracion(k.tiempo_cierre_horas?.valor), vcls: 'v-teal', icon: 'clock' },
     { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat' },
     { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
     { label: 'CSAT', value: (k.csat?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
@@ -457,7 +462,6 @@ function renderWeekly(t) {
       labels: t.weeks,
       datasets: [
         { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22 },
-        { type: 'line', label: 'Horas prom. hasta cierre', data: t.close_hours, borderColor: '#1A2B4A', backgroundColor: '#1A2B4A', yAxisID: 'y1', tension: 0.3, pointRadius: 3, borderWidth: 2 },
       ],
     },
     options: {
@@ -465,7 +469,6 @@ function renderWeekly(t) {
       interaction: { mode: 'index', intersect: false },
       scales: {
         y: { position: 'left', grid: { color: '#F0F4F8' }, title: { display: true, text: 'Tickets', font: { size: 10 } } },
-        y1: { position: 'right', grid: { display: false }, title: { display: true, text: 'Horas', font: { size: 10 } } },
         x: { grid: { display: false } },
       },
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
@@ -497,19 +500,26 @@ function renderVersion(rows) {
   const tbody = document.getElementById('versionTableBody');
   tbody.innerHTML = rows.map(r => {
     const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
-    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${r.cierre_horas.toFixed(1)} h</td></tr>`;
+    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${fmtDuracion(r.cierre_horas)}</td></tr>`;
   }).join('');
 
   const conVersion = rows.filter(r => r.version !== 'Sin versión').slice().sort((a, b) => b.cierre_horas - a.cierre_horas);
+  // Mismo umbral de 72 h: si el promedio general está en días, el gráfico
+  // también se grafica y etiqueta en días para no mezclar unidades.
+  const enDias = conVersion.some(r => r.cierre_horas >= 72);
+  const aUnidad = (h) => enDias ? Number((h / 24).toFixed(1)) : Number(h.toFixed(1));
   safeChart('chartVersion', {
     type: 'bar',
     data: {
       labels: conVersion.map(r => r.version),
-      datasets: [{ label: 'Horas prom. cierre', data: conVersion.map(r => r.cierre_horas), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
+      datasets: [{ label: enDias ? 'Días prom. cierre' : 'Horas prom. cierre', data: conVersion.map(r => aUnidad(r.cierre_horas)), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
     },
     options: {
       indexAxis: 'y', maintainAspectRatio: false,
-      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      scales: {
+        x: { grid: { color: '#F0F4F8' }, title: { display: true, text: enDias ? 'Días' : 'Horas', font: { size: 10 } } },
+        y: { grid: { display: false } },
+      },
       plugins: { legend: { display: false } },
     },
   });
