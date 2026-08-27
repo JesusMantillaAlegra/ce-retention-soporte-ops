@@ -217,7 +217,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th><th>Cierre prom.</th></tr></thead>
+          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th></tr></thead>
           <tbody id="versionTableBody"></tbody>
         </table>
       </div>
@@ -481,17 +481,39 @@ function renderCsat(c) {
   document.getElementById('csatSub').textContent = `De los tickets con encuesta respondida (${fmt(c.total_respuestas)})`;
   // Barras VERTICALES, orden fijo en el eje X: Detractor, Neutro, Promotor
   // (pedido explícito de Lauren — no alfabético, no por tamaño de barra).
+  const total = c.total_respuestas || (c.detractor + c.passive + c.promoter) || 0;
+  const valores = [c.detractor, c.passive, c.promoter];
+  const pctBarra = (v) => total ? ((v / total) * 100).toFixed(1) + '%' : '—';
+  // Plugin liviano (sin librería externa) para dibujar el % encima de cada
+  // barra, siempre visible y no solo al pasar el mouse.
+  const etiquetaPct = {
+    id: 'etiquetaPct',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.fillStyle = '#1A2B4A';
+      ctx.textAlign = 'center';
+      meta.data.forEach((bar, i) => {
+        ctx.fillText(pctBarra(valores[i]), bar.x, bar.y - 6);
+      });
+      ctx.restore();
+    },
+  };
   safeChart('chartCsat', {
     type: 'bar',
     data: {
       labels: ['Detractor', 'Neutro', 'Promotor'],
-      datasets: [{ label: 'Tickets', data: [c.detractor, c.passive, c.promoter], backgroundColor: ['#EF4444', '#F5A623', '#22C55E'], borderRadius: 4, maxBarThickness: 60 }],
+      datasets: [{ label: 'Tickets', data: valores, backgroundColor: ['#EF4444', '#F5A623', '#22C55E'], borderRadius: 4, maxBarThickness: 60 }],
     },
     options: {
       maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
       scales: { y: { grid: { color: '#F0F4F8' } }, x: { grid: { display: false } } },
       plugins: { legend: { display: false } },
     },
+    plugins: [etiquetaPct],
   });
 }
 
@@ -500,7 +522,7 @@ function renderVersion(rows) {
   const tbody = document.getElementById('versionTableBody');
   tbody.innerHTML = rows.map(r => {
     const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
-    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${fmtDuracion(r.cierre_horas)}</td></tr>`;
+    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td></tr>`;
   }).join('');
 
   const conVersion = rows.filter(r => r.version !== 'Sin versión').slice().sort((a, b) => b.cierre_horas - a.cierre_horas);
