@@ -181,12 +181,12 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <!-- ── SECCIÓN 2: TENDENCIA ── -->
   <div class="section-label">Evolución</div>
   <div class="section-title">¿Cómo se ha movido la demanda y el tiempo de cierre?</div>
-  <div class="section-sub">Actualizado automáticamente cada semana · Semanas grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
+  <div class="section-sub">Actualizado automáticamente cada semana · Meses grises = datos incompletos (tickets muy recientes que aún no cierran)</div>
 
   <div class="chart-grid-3" style="margin-bottom:0">
     <div class="chart-card">
-      <div class="chart-card-title">Volumen semanal y tiempo de cierre</div>
-      <div class="chart-card-sub">Barras = tickets creados · Línea = horas promedio hasta cierre</div>
+      <div class="chart-card-title">Volumen mensual</div>
+      <div class="chart-card-sub">Tickets creados por mes</div>
       <div class="chart-wrap"><canvas id="chartWeekly"></canvas></div>
     </div>
     <div class="chart-card">
@@ -203,12 +203,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <div class="section-title">Tickets por versión</div>
   <div class="section-sub">Volumen y horas de cierre por versión, actualizado en vivo</div>
 
-  <div class="chart-grid-2" style="margin-bottom:20px">
-    <div class="chart-card">
-      <div class="chart-card-title">Horas promedio hasta cierre</div>
-      <div class="chart-card-sub">Por versión</div>
-      <div class="chart-wrap"><canvas id="chartVersion"></canvas></div>
-    </div>
+  <div style="margin-bottom:20px">
     <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
       <div class="table-header">
         <div>
@@ -329,23 +324,56 @@ function fechaLegible(iso) {
   return `${d} ${meses[Number(m) - 1]} ${y}`;
 }
 
+const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Último día de un mes dado (año, mes 1-12), como YYYY-MM-DD.
+function finDeMes(anio, mes) {
+  const d = new Date(Date.UTC(anio, mes, 0));
+  return d.toISOString().slice(0, 10);
+}
+
 function construirBarraFiltros() {
   const container = document.getElementById('rangeBar');
   if (!container) return null;
   const hoy = hoyISO();
+  const [anioActual, mesActual] = hoy.split('-').map(Number);
+
+  const opciones = [`<option value="">Año completo (${anioActual})</option>`];
+  for (let m = 1; m <= mesActual; m++) {
+    opciones.push(`<option value="${m}">${MESES_LARGO[m - 1]} ${anioActual}</option>`);
+  }
+  opciones.push(`<option value="custom">Fecha personalizada</option>`);
 
   container.className = 'filter-bar';
   container.innerHTML = `
     <div class="filter-bar-row">
+      <span class="filter-label">Período</span>
+      <select class="filter-date-input" id="mesFiltro">${opciones.join('')}</select>
+      <span class="filter-status" id="filtroEstado"></span>
+    </div>
+    <div class="filter-bar-row" id="filaFechaPersonalizada" style="display:none">
       <span class="filter-label">Desde</span>
       <input type="date" class="filter-date-input" id="dateDesde" max="${hoy}" value="${inicioAnioActualISO()}">
       <span class="filter-label">Hasta</span>
       <input type="date" class="filter-date-input" id="dateHasta" max="${hoy}" value="${hoy}">
-      <span class="filter-status" id="filtroEstado"></span>
     </div>
-    <div class="filter-note">Los indicadores se recalculan solos al cambiar la fecha, contando los tickets creados entre esas dos fechas.</div>
+    <div class="filter-note">Los indicadores se recalculan solos al cambiar el período, contando los tickets creados en ese rango.</div>
   `;
   return container;
+}
+
+// A partir del valor del selector de mes, devuelve {desde, hasta} en formato
+// YYYY-MM-DD. "" (Año completo) = 1-ene a hoy. Un mes específico = 1 al
+// último día de ese mes (o hoy, si es el mes en curso y no ha terminado).
+function rangoDesdeSelector(valorMes) {
+  const hoy = hoyISO();
+  const [anioActual] = hoy.split('-').map(Number);
+  if (!valorMes) return { desde: inicioAnioActualISO(), hasta: hoy };
+  const mes = Number(valorMes);
+  const desde = `${anioActual}-${String(mes).padStart(2, '0')}-01`;
+  const finCalculado = finDeMes(anioActual, mes);
+  const hasta = finCalculado > hoy ? hoy : finCalculado;
+  return { desde, hasta };
 }
 
 async function cargar(desde, hasta) {
@@ -378,6 +406,8 @@ async function cargar(desde, hasta) {
 (function iniciar() {
   const barra = construirBarraFiltros();
   if (!barra) return;
+  const mesInput = document.getElementById('mesFiltro');
+  const filaPersonalizada = document.getElementById('filaFechaPersonalizada');
   const desdeInput = document.getElementById('dateDesde');
   const hastaInput = document.getElementById('dateHasta');
   const estado = document.getElementById('filtroEstado');
@@ -385,7 +415,7 @@ async function cargar(desde, hasta) {
   // Debounce corto: evita disparar una consulta por cada tecla/click mientras
   // el usuario todavía está seleccionando la fecha en el date picker.
   let temporizador;
-  function onCambioFecha() {
+  function onCambioFechaPersonalizada() {
     const desde = desdeInput.value;
     const hasta = hastaInput.value;
     if (desde && hasta && desde > hasta) {
@@ -396,10 +426,22 @@ async function cargar(desde, hasta) {
     temporizador = setTimeout(() => cargar(desde, hasta), 300);
   }
 
-  desdeInput.addEventListener('change', onCambioFecha);
-  hastaInput.addEventListener('change', onCambioFecha);
+  mesInput.addEventListener('change', () => {
+    if (mesInput.value === 'custom') {
+      filaPersonalizada.style.display = '';
+      onCambioFechaPersonalizada();
+      return;
+    }
+    filaPersonalizada.style.display = 'none';
+    const { desde, hasta } = rangoDesdeSelector(mesInput.value);
+    cargar(desde, hasta);
+  });
 
-  cargar(desdeInput.value, hastaInput.value);
+  desdeInput.addEventListener('change', onCambioFechaPersonalizada);
+  hastaInput.addEventListener('change', onCambioFechaPersonalizada);
+
+  const inicial = rangoDesdeSelector(mesInput.value);
+  cargar(inicial.desde, inicial.hasta);
 })();
 
 function safeChart(canvasId, config) {
@@ -454,12 +496,18 @@ function renderKpis(k) {
     </div>`).join('');
 }
 
+const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const etiquetaMes = (iso) => {
+  const [y, m] = iso.split('-');
+  return `${MESES_CORTO[Number(m) - 1]} ${y}`;
+};
+
 function renderWeekly(t) {
   if (!t) return;
   const barColors = t.volumes.map((_, i) => i >= (t.censured_from_index ?? t.volumes.length) ? '#CBD5E1' : '#00BFA5');
   safeChart('chartWeekly', {
     data: {
-      labels: t.weeks,
+      labels: t.weeks.map(etiquetaMes),
       datasets: [
         { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22 },
       ],
@@ -525,26 +573,6 @@ function renderVersion(rows) {
     return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td></tr>`;
   }).join('');
 
-  const conVersion = rows.filter(r => r.version !== 'Sin versión').slice().sort((a, b) => b.cierre_horas - a.cierre_horas);
-  // Mismo umbral de 72 h: si el promedio general está en días, el gráfico
-  // también se grafica y etiqueta en días para no mezclar unidades.
-  const enDias = conVersion.some(r => r.cierre_horas >= 72);
-  const aUnidad = (h) => enDias ? Number((h / 24).toFixed(1)) : Number(h.toFixed(1));
-  safeChart('chartVersion', {
-    type: 'bar',
-    data: {
-      labels: conVersion.map(r => r.version),
-      datasets: [{ label: enDias ? 'Días prom. cierre' : 'Horas prom. cierre', data: conVersion.map(r => aUnidad(r.cierre_horas)), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 18 }],
-    },
-    options: {
-      indexAxis: 'y', maintainAspectRatio: false,
-      scales: {
-        x: { grid: { color: '#F0F4F8' }, title: { display: true, text: enDias ? 'Días' : 'Horas', font: { size: 10 } } },
-        y: { grid: { display: false } },
-      },
-      plugins: { legend: { display: false } },
-    },
-  });
 }
 </script>
 
