@@ -157,7 +157,8 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     <span class="header-module">Soporte · Métricas Operativas</span>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
-    <span class="header-time" id="lastUpdated">Actualizado: 26-ago-2026</span>
+    <span class="header-time" id="lastUpdated"></span>
+    <button class="btn-header" id="btnActualizar"><i data-lucide="refresh-cw"></i>Actualizar</button>
   </div>
 </header>
 
@@ -235,14 +236,12 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
 </div>
 
 <div class="fallback" id="fallback" style="display:none;">
-  <h2>No se pudo cargar los datos</h2>
-  <p>Verifica que <code>ce_retention_dashboard_data.js</code> (o <code>ce_retention_dashboard_data.json</code>) esté en la misma carpeta que este archivo.</p>
+  <h2>No se pudieron cargar los datos</h2>
+  <p>El servicio de métricas no respondió. Intenta recargar en unos minutos.</p>
 </div>
 
 <div class="footer">Alegra — Métricas Operativas de Soporte · Datos actualizados automáticamente cada semana</div>
 
-<script src="./ce_retention_dashboard_data.js"></script>
-<script src="./ce_retention_dashboard_history.js"></script>
 <script>
 (function () {
   document.body.style.visibility = 'visible';
@@ -282,30 +281,69 @@ function runRender(data) {
   }
 }
 
-// Igual que el dashboard de Lucía: se abre con doble clic (file://), y Chrome
-// bloquea fetch() de archivos locales por CORS. Por eso el dato principal se
-// carga como <script src="./ce_retention_dashboard_data.js"> (window.CE_RETENTION_DATA),
-// que sí funciona desde file://. Si ese archivo no está, se intenta fetch() del
-// JSON como respaldo (útil si esto algún día se sirve desde un servidor real).
-if (typeof window.CE_RETENTION_DATA !== 'undefined') {
-  runRender(window.CE_RETENTION_DATA);
-} else {
-  fetch('./ce_retention_dashboard_data.json')
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(runRender)
-    .catch(e => {
-      console.error('Error al cargar datos (ni ce_retention_dashboard_data.js ni el JSON via fetch funcionaron):', e);
-      document.getElementById('ce-main').style.display = 'none';
-      document.getElementById('fallback').style.display = 'block';
-    });
+// Los datos ya NO vienen de archivos generados: se piden en vivo a los
+// endpoints de Vercel, que consultan HubSpot y Metabase en el momento.
+//
+// API_BASE vacío = mismo dominio (cuando esto se sirve desde Vercel, que es
+// el caso normal). Si algún día se quiere abrir el HTML por fuera —doble clic
+// local, u otro hosting— basta con poner acá la URL del proyecto de Vercel;
+// los endpoints ya mandan el header CORS que hace falta.
+const API_BASE = '';
+
+function mostrarError(titulo, detalle) {
+  document.getElementById('ce-main').style.display = 'none';
+  const fb = document.getElementById('fallback');
+  fb.innerHTML = `<h2>${titulo}</h2><p>${detalle}</p>`;
+  fb.style.display = 'block';
 }
 
-// ── Histórico: cada corrida semanal agrega un snapshot nuevo a
-// ce_retention_dashboard_history.json (nunca pisa los anteriores). El filtro
-// de fecha elige qué snapshot mostrar: el más reciente cuyo snapshot_id sea
-// <= la fecha "Hasta" elegida (o el más antiguo de todos si la fecha es
-// anterior al primer snapshot que existe). "Desde" es informativo — muestra
-// el inicio real del período de ese snapshot, no es editable.
+// Se piden las dos cosas juntas: la foto EN VIVO y el histórico. Van juntas a
+// propósito — el filtro de fecha necesita conocer ambas para armarse bien.
+//
+// El histórico es opcional: si falla, el tablero igual muestra la foto en vivo
+// (solo sin poder mirar periodos pasados). La foto en vivo NO es opcional: sin
+// ella no hay nada que mostrar.
+Promise.all([
+  fetch(`${API_BASE}/api/metrics`).then(async r => {
+    const cuerpo = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(cuerpo?.detalle || cuerpo?.error || `HTTP ${r.status}`);
+    return cuerpo;
+  }),
+  fetch(`${API_BASE}/api/history`)
+    .then(r => (r.ok ? r.json() : []))
+    .catch(e => {
+      console.warn('No se pudo cargar el histórico (solo se ve la foto actual):', e);
+      return [];
+    }),
+])
+  .then(([envivo, historico]) => {
+    // El endpoint devuelve los datos igual cuando algo se ve raro, pero
+    // marcados. Se pintan (mejor eso que una pantalla en blanco) y se deja
+    // el aviso en consola para quien mantenga el tablero.
+    if (envivo._advertencias?.length) {
+      console.warn('El API devolvió advertencias sobre estos datos:', envivo._advertencias);
+    }
+    // La foto en vivo entra al selector como un periodo más, el de "hoy", y
+    // queda seleccionada por defecto. Antes esto era un bug: el histórico se
+    // cargaba después y sobrescribía la foto en vivo con el último snapshot
+    // guardado, así que los datos del momento nunca se veían.
+    setupRangeBar(envivo, Array.isArray(historico) ? historico : []);
+  })
+  .catch(e => {
+    console.error('Error al cargar las métricas desde el API:', e);
+    mostrarError(
+      'No se pudieron cargar los datos',
+      `No hubo respuesta del servicio de métricas. Detalle: <code>${e.message}</code>`
+    );
+  });
+
+// ── Periodos disponibles: la foto EN VIVO (hoy) más los snapshots que el cron
+// semanal de Vercel fue guardando (nunca pisa los anteriores).
+//
+// El filtro de fecha elige qué periodo mostrar: el más reciente cuya fecha sea
+// <= la fecha "Hasta" elegida. Elegir hoy = datos en vivo; elegir una fecha
+// pasada = el snapshot que estaba vigente ese día. "Desde" es informativo —
+// muestra el inicio real del período de esa foto, no es editable.
 function nearestSnapshotIdx(sorted, dateStr) {
   if (!dateStr) return 0;
   for (let i = 0; i < sorted.length; i++) {
@@ -314,11 +352,22 @@ function nearestSnapshotIdx(sorted, dateStr) {
   return sorted.length - 1;
 }
 
-function setupRangeBar(history) {
-  if (!Array.isArray(history) || !history.length) return;
+function setupRangeBar(envivo, history) {
   const container = document.getElementById('rangeBar');
   if (!container) return;
-  const sorted = history.slice().sort((a, b) => (b.snapshot_id || '').localeCompare(a.snapshot_id || ''));
+
+  // La foto en vivo se etiqueta con la fecha de corte de su propio período,
+  // y se marca para poder distinguirla de un snapshot guardado.
+  const hoyId = envivo?.meta?.periodo?.fin || new Date().toISOString().slice(0, 10);
+  const enVivoEntry = { ...envivo, snapshot_id: hoyId, _envivo: true };
+
+  // Se descarta cualquier snapshot con la misma fecha que la foto en vivo: la
+  // versión en vivo siempre es más fresca que la guardada del mismo día.
+  const previos = (Array.isArray(history) ? history : []).filter((h) => h.snapshot_id !== hoyId);
+  const sorted = [enVivoEntry, ...previos].sort((a, b) =>
+    (b.snapshot_id || '').localeCompare(a.snapshot_id || '')
+  );
+
   const oldest = sorted[sorted.length - 1].snapshot_id;
   const newest = sorted[0].snapshot_id;
   container.className = 'filter-bar';
@@ -353,19 +402,16 @@ function setupRangeBar(history) {
     if (!primary) return;
     desdeLabel.textContent = fechaLegible(primary.meta?.periodo?.inicio || oldest);
     runRender(primary);
+    // Al mirar un periodo pasado se avisa en el header, para que nadie lea un
+    // snapshot viejo creyendo que son los números de hoy.
+    const lu = document.getElementById('lastUpdated');
+    if (lu && !primary._envivo) {
+      lu.textContent = `Viendo el periodo cerrado al ${fechaLegible(primary.snapshot_id)}`;
+    }
   }
 
   document.getElementById('btnAplicarFiltro').addEventListener('click', apply);
   apply();
-}
-
-if (typeof window.CE_RETENTION_HISTORY !== 'undefined') {
-  setupRangeBar(window.CE_RETENTION_HISTORY);
-} else {
-  fetch('./ce_retention_dashboard_history.json')
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(setupRangeBar)
-    .catch(e => console.warn('No se pudo cargar el histórico de periodos (solo se ve la foto actual):', e));
 }
 
 function safeChart(canvasId, config) {
@@ -386,7 +432,7 @@ function safeChart(canvasId, config) {
 
 function render(data) {
   LAST_DATA = data;
-  document.getElementById('lastUpdated').textContent = 'Actualizado: 26-ago-2026';
+  document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
   document.getElementById('periodoSub').textContent =
     `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 

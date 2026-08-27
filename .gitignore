@@ -9,3 +9,6 @@ hubspot.env
 
 # Node (por si en algún momento se usa algo con dependencias)
 node_modules/
+
+# Vercel CLI (vinculación local del proyecto)
+.vercel/
