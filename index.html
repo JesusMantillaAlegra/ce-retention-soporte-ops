@@ -342,7 +342,13 @@ function construirBarraFiltros() {
   for (let m = 1; m <= mesActual; m++) {
     opciones.push(`<option value="${m}">${MESES_LARGO[m - 1]} ${anioActual}</option>`);
   }
+  opciones.push(`<option value="rango">Entre dos meses…</option>`);
   opciones.push(`<option value="custom">Fecha personalizada</option>`);
+
+  const opcionesMes = [];
+  for (let m = 1; m <= mesActual; m++) {
+    opcionesMes.push(`<option value="${m}">${MESES_LARGO[m - 1]} ${anioActual}</option>`);
+  }
 
   container.className = 'filter-bar';
   container.innerHTML = `
@@ -350,6 +356,12 @@ function construirBarraFiltros() {
       <span class="filter-label">Período</span>
       <select class="filter-date-input" id="mesFiltro">${opciones.join('')}</select>
       <span class="filter-status" id="filtroEstado"></span>
+    </div>
+    <div class="filter-bar-row" id="filaRangoMeses" style="display:none">
+      <span class="filter-label">Desde</span>
+      <select class="filter-date-input" id="mesDesde">${opcionesMes.join('')}</select>
+      <span class="filter-label">Hasta</span>
+      <select class="filter-date-input" id="mesHasta">${opcionesMes.join('')}</select>
     </div>
     <div class="filter-bar-row" id="filaFechaPersonalizada" style="display:none">
       <span class="filter-label">Desde</span>
@@ -372,6 +384,20 @@ function rangoDesdeSelector(valorMes) {
   const mes = Number(valorMes);
   const desde = `${anioActual}-${String(mes).padStart(2, '0')}-01`;
   const finCalculado = finDeMes(anioActual, mes);
+  const hasta = finCalculado > hoy ? hoy : finCalculado;
+  return { desde, hasta };
+}
+
+// Rango entre dos meses del año en curso (ambos inclusive). Si "hasta" queda
+// antes que "desde", se intercambian para no mandar un rango invertido.
+function rangoEntreMeses(valorMesDesde, valorMesHasta) {
+  const hoy = hoyISO();
+  const [anioActual] = hoy.split('-').map(Number);
+  let mesDesde = Number(valorMesDesde);
+  let mesHasta = Number(valorMesHasta);
+  if (mesDesde > mesHasta) [mesDesde, mesHasta] = [mesHasta, mesDesde];
+  const desde = `${anioActual}-${String(mesDesde).padStart(2, '0')}-01`;
+  const finCalculado = finDeMes(anioActual, mesHasta);
   const hasta = finCalculado > hoy ? hoy : finCalculado;
   return { desde, hasta };
 }
@@ -408,8 +434,11 @@ async function cargar(desde, hasta) {
   if (!barra) return;
   const mesInput = document.getElementById('mesFiltro');
   const filaPersonalizada = document.getElementById('filaFechaPersonalizada');
+  const filaRango = document.getElementById('filaRangoMeses');
   const desdeInput = document.getElementById('dateDesde');
   const hastaInput = document.getElementById('dateHasta');
+  const mesDesdeInput = document.getElementById('mesDesde');
+  const mesHastaInput = document.getElementById('mesHasta');
   const estado = document.getElementById('filtroEstado');
 
   // Debounce corto: evita disparar una consulta por cada tecla/click mientras
@@ -426,17 +455,41 @@ async function cargar(desde, hasta) {
     temporizador = setTimeout(() => cargar(desde, hasta), 300);
   }
 
+  function ocultarFilasExtra() {
+    filaPersonalizada.style.display = 'none';
+    filaRango.style.display = 'none';
+  }
+
+  function onCambioRangoMeses() {
+    const { desde, hasta } = rangoEntreMeses(mesDesdeInput.value, mesHastaInput.value);
+    cargar(desde, hasta);
+  }
+
   mesInput.addEventListener('change', () => {
     if (mesInput.value === 'custom') {
+      ocultarFilasExtra();
       filaPersonalizada.style.display = '';
       onCambioFechaPersonalizada();
       return;
     }
-    filaPersonalizada.style.display = 'none';
+    if (mesInput.value === 'rango') {
+      ocultarFilasExtra();
+      filaRango.style.display = '';
+      // Por defecto el mes "hasta" queda en el último mes disponible; el
+      // "desde" en el anterior (o el mismo, si solo hay uno disponible).
+      const opcionesDisponibles = mesHastaInput.options.length;
+      mesHastaInput.selectedIndex = opcionesDisponibles - 1;
+      mesDesdeInput.selectedIndex = Math.max(0, opcionesDisponibles - 2);
+      onCambioRangoMeses();
+      return;
+    }
+    ocultarFilasExtra();
     const { desde, hasta } = rangoDesdeSelector(mesInput.value);
     cargar(desde, hasta);
   });
 
+  mesDesdeInput.addEventListener('change', onCambioRangoMeses);
+  mesHastaInput.addEventListener('change', onCambioRangoMeses);
   desdeInput.addEventListener('change', onCambioFechaPersonalizada);
   hastaInput.addEventListener('change', onCambioFechaPersonalizada);
 
