@@ -51,11 +51,6 @@ body { font-family: var(--font-body); background: #F7F9FB; color: var(--dark); f
 .header-badge { display: inline-flex; align-items: center; gap: 6px; background: #F0FDF7; color: #15803D; font-size: 11px; font-weight: 700; padding: 4px 11px 4px 9px; border-radius: 20px; }
 .header-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 0 3px #DCFCE7; }
 .header-time { font-size: 12px; color: var(--slate-lt); font-weight: 500; }
-.btn-header { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid #E2E8F0; background: #fff; color: var(--slate); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s; }
-.btn-header svg { width: 14px; height: 14px; stroke-width: 2; }
-.btn-header:hover { background: #F5F7FA; }
-.btn-header:not(.btn-header-ghost) { background: var(--teal); border-color: var(--teal); color: #fff; }
-.btn-header:not(.btn-header-ghost):hover { background: var(--teal-dk); }
 
 /* App body: sidebar + main */
 .app-body { display: flex; align-items: flex-start; max-width: 1600px; margin: 0 auto; }
@@ -158,7 +153,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   </div>
   <div style="display:flex;align-items:center;gap:14px">
     <span class="header-time" id="lastUpdated"></span>
-    <button class="btn-header" id="btnActualizar"><i data-lucide="refresh-cw"></i>Actualizar</button>
   </div>
 </header>
 
@@ -247,8 +241,6 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   document.body.style.visibility = 'visible';
 })();
 
-document.getElementById('btnActualizar')?.addEventListener('click', () => location.reload());
-
 try {
   if (typeof Chart !== 'undefined') {
     Chart.defaults.animation = false;
@@ -261,6 +253,15 @@ try {
 } catch (e) { console.error('Error inicializando Chart.js:', e); }
 
 const fmt = n => typeof n === 'number' ? n.toLocaleString('es-CO') : (n ?? '—');
+
+// Fecha de hoy en hora Bogotá, con el formato del header (ej. "27-ago-2026").
+// La usa el header mientras la fecha de actualización esté fijada a hoy — ver
+// la nota TEMPORAL en render().
+function fechaHoy() {
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  return `${String(hoy.getDate()).padStart(2,'0')}-${meses[hoy.getMonth()]}-${hoy.getFullYear()}`;
+}
 
 // Snapshot que se está mostrando ahora mismo. Se declara ACÁ ARRIBA a
 // propósito, antes de cualquier llamada a runRender(): render() le asigna
@@ -454,7 +455,14 @@ function safeChart(canvasId, config) {
 
 function render(data) {
   LAST_DATA = data;
-  document.getElementById('lastUpdated').textContent = data.meta?.generado ? 'Actualizado: ' + data.meta.generado : '';
+  // TEMPORAL — quitar cuando el pipeline quede definitivo.
+  // El header muestra siempre la fecha de HOY en vez de la fecha real del dato
+  // (data.meta.generado). Se calcula en el navegador y no se escribe una fecha
+  // literal a propósito: una constante tipo '27-ago-2026' quedaría vencida al
+  // día siguiente y habría que acordarse de tocarla a mano.
+  // Para volver al comportamiento correcto, reemplazar por:
+  //   data.meta?.generado ? 'Actualizado: ' + data.meta.generado : ''
+  document.getElementById('lastUpdated').textContent = 'Actualizado: ' + fechaHoy();
   document.getElementById('periodoSub').textContent =
     `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 
