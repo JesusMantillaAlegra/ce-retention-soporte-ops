@@ -201,7 +201,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <!-- ── SECCIÓN 3: VERSIÓN ── -->
   <div class="section-label">Distribución</div>
   <div class="section-title">Tickets por versión</div>
-  <div class="section-sub">Volumen y horas de cierre por versión, actualizado en vivo</div>
+  <div class="section-sub">Volumen por versión, actualizado en vivo</div>
 
   <div style="margin-bottom:20px">
     <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
@@ -212,7 +212,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th><th>Tiempo de cierre</th></tr></thead>
+          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th></tr></thead>
           <tbody id="versionTableBody"></tbody>
         </table>
       </div>
@@ -626,8 +626,7 @@ function renderVersion(rows) {
   const tbody = document.getElementById('versionTableBody');
   tbody.innerHTML = rows.map(r => {
     const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
-    const dias = typeof r.cierre_horas === 'number' ? (r.cierre_horas / 24).toFixed(1) + ' días' : '—';
-    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${dias}</td></tr>`;
+    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td></tr>`;
   }).join('');
 
 }
