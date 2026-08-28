@@ -588,7 +588,7 @@ function renderWeekly(t) {
       labels: t.weeks.map(etiquetaMes),
       datasets: [
         { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22, order: 1 },
-        { type: 'line', label: 'Tiempo de cierre promedio (días)', data: closeDays, yAxisID: 'y1', borderColor: '#111827', backgroundColor: '#111827', borderWidth: 2, pointRadius: 6, pointHoverRadius: 7, pointStyle: 'circle', pointBackgroundColor: '#111827', pointBorderColor: '#fff', pointBorderWidth: 3, tension: 0.2, order: 0 },
+        { type: 'line', label: 'Tiempo de cierre promedio (días)', data: closeDays, yAxisID: 'y1', borderColor: '#111827', backgroundColor: '#111827', borderWidth: 2, pointRadius: 5, pointHoverRadius: 6, pointStyle: 'circle', pointBackgroundColor: '#111827', pointBorderColor: 'transparent', pointBorderWidth: 0, tension: 0.2, order: 0 },
       ],
     },
     options: {
