@@ -212,7 +212,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
       </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th></tr></thead>
+          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th><th>Tiempo de cierre</th></tr></thead>
           <tbody id="versionTableBody"></tbody>
         </table>
       </div>
@@ -558,11 +558,13 @@ const etiquetaMes = (iso) => {
 function renderWeekly(t) {
   if (!t) return;
   const barColors = t.volumes.map((_, i) => i >= (t.censured_from_index ?? t.volumes.length) ? '#CBD5E1' : '#00BFA5');
+  const closeDays = (t.close_hours || []).map(h => typeof h === 'number' ? h / 24 : null);
   safeChart('chartWeekly', {
     data: {
       labels: t.weeks.map(etiquetaMes),
       datasets: [
         { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22 },
+        { type: 'line', label: 'Tiempo de cierre promedio (días)', data: closeDays, yAxisID: 'y1', borderColor: '#111827', backgroundColor: '#111827', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#111827', tension: 0.2 },
       ],
     },
     options: {
@@ -570,6 +572,7 @@ function renderWeekly(t) {
       interaction: { mode: 'index', intersect: false },
       scales: {
         y: { position: 'left', grid: { color: '#F0F4F8' }, title: { display: true, text: 'Tickets', font: { size: 10 } } },
+        y1: { position: 'right', grid: { display: false }, title: { display: true, text: 'Días', font: { size: 10 } } },
         x: { grid: { display: false } },
       },
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
@@ -623,7 +626,8 @@ function renderVersion(rows) {
   const tbody = document.getElementById('versionTableBody');
   tbody.innerHTML = rows.map(r => {
     const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
-    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td></tr>`;
+    const dias = typeof r.cierre_horas === 'number' ? (r.cierre_horas / 24).toFixed(1) + ' días' : '—';
+    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td><td>${dias}</td></tr>`;
   }).join('');
 
 }
