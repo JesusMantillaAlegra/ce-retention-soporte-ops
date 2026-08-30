@@ -47,7 +47,7 @@ AND hubspot_owner_id != owner_lucia            -- excluye la gestión de la asis
 | Volumen de tickets | `createdate` | Ninguno adicional |
 | Tiempo de cierre promedio (8,9 días) | `createdate`, `closed_date`, `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | Excluir tickets con cualquiera de las dos propiedades de reopen pobladas |
 | Tasa de reapertura — 3,3% (1.510 / 45.321) | `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | `reopen__retroactivo_tema_diferente = 'Nueva consulta' OR ticket_reabierto__wf = 'Nueva consulta'` |
-| Resolución en primer contacto (FCR) | `closed_date`, `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | Numerador: `closed_date HAS_PROPERTY` + ninguna de las dos propiedades de reopen marcada como `'Nueva consulta'` (no es lo mismo que "vacías": un ticket puede tener la propiedad poblada con `'Cierre agradecimiento'` o `'Ambiguo'` y sigue contando como resuelto en primer contacto). Denominador: `closed_date HAS_PROPERTY` |
+| Resolución en primer contacto (FCR) | `closed_date`, `reopen__retroactivo_tema_diferente`, `ticket_reabierto__wf` | **Ajuste 28-ago-2026:** se ancla a `closed_date` (no `createdate`), con ventana de maduración de 3 días (`closed_date <= hoy − 3 días`) — un ticket cerrado hace menos de 3 días no se cuenta todavía como "resuelto en primer contacto" definitivo, porque podría reabrirse. Numerador: `closed_date` en el rango (con la ventana de maduración) + ninguna de las dos propiedades de reopen marcada como `'Nueva consulta'` (no es lo mismo que "vacías": un ticket puede tener la propiedad poblada con `'Cierre agradecimiento'` o `'Ambiguo'` y sigue contando como resuelto en primer contacto — esa parte de la definición NO cambió). Denominador: mismo rango de `closed_date` con la ventana de maduración |
 | Satisfacción (CSAT) — ~83-84% (varía según el momento de consulta) | `csat_property`, `fecha_de_la_ultima_encuestra_ces_csat` | `csat_property IS NOT NULL` + `fecha_de_la_ultima_encuestra_ces_csat >= 1-ene-[año]` |
 | Distribución CSAT (Detractor, Neutro, Promotor) | Misma propiedad de CSAT | Mismo filtro que CSAT — gráfico aparte, no alimenta el KPI principal. Barras **verticales**, eje X en este orden fijo: **Detractor, Neutro, Promotor** |
 | Distribución por versión | `version` | Ninguno adicional |
@@ -93,7 +93,9 @@ WHERE pipeline IN (lista_pipelines_soporte)
 `Reopen (%) = (reaperturas ÷ Volumen) × 100`
 
 ### Resolución en primer contacto (FCR)
-Corrección de Estefanía: la condición NO es que las propiedades estén vacías — es que ninguna diga `'Nueva consulta'`. Un ticket con la propiedad poblada como `'Cierre agradecimiento'` o `'Ambiguo'` sigue siendo un ticket resuelto en primer contacto; solo `'Nueva consulta'` lo saca del numerador (es el mismo criterio que ya se usa para contar reaperturas).
+Corrección de Estefanía: la condición NO es que las propiedades estén vacías — es que ninguna diga `'Nueva consulta'`. Un ticket con la propiedad poblada como `'Cierre agradecimiento'` o `'Ambiguo'` sigue siendo un ticket resuelto en primer contacto; solo `'Nueva consulta'` lo saca del numerador (es el mismo criterio que ya se usa para contar reaperturas). Esta parte de la definición **no cambió**.
+
+**Ajuste 28-ago-2026 (a raíz de la pregunta de Lauren Pacheco, y confirmado independientemente por Breeze):** se ancla el cálculo a `closed_date` en vez de `createdate`, con una ventana de maduración de 3 días. Anclarlo a `createdate` mezclaba tickets creados en el período con cierres y reaperturas que podían ocurrir mucho después, haciendo el indicador inestable. Con `closed_date` + ventana de maduración, un ticket cerrado hace menos de 3 días todavía no se cuenta como "resuelto en primer contacto" definitivo — se espera a que pase la ventana en la que razonablemente podría reabrirse.
 ```sql
 SELECT
   COUNT(*) FILTER (
@@ -104,9 +106,12 @@ SELECT
   COUNT(*) FILTER (WHERE closed_date IS NOT NULL) AS total_cerrados
 FROM tickets
 WHERE pipeline IN (lista_pipelines_soporte)
-  AND createdate >= 1-ene-[año];
+  AND closed_date >= 1-ene-[año]
+  AND closed_date <= hoy - INTERVAL '3 days';
 ```
 `FCR (%) = (resueltos_1er_contacto ÷ total_cerrados) × 100`
+
+Nota: el resto de métricas (volumen, reopen, tiempo de cierre, CSAT, tendencia) siguen ancladas a `createdate` (o a su propia fecha de evento, en el caso de CSAT) — este ajuste de ventana de maduración es específico de FCR.
 
 ### Satisfacción (CSAT)
 Propiedad de HubSpot: **`clasificacion_encuesta_ces_csat`** (nombre interno confirmado en Configuración → Propiedades → Tickets, 27-ago-2026). Los valores que guarda esta propiedad están en inglés: `Promoter`, `Passive`, `Detractor`.
