@@ -171,6 +171,7 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <div class="section-label">Soporte</div>
   <div class="section-title">Métricas operativas de soporte</div>
   <div class="section-sub" id="periodoSub">Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes</div>
+  <div class="section-sub" style="margin-top:-14px; font-style:italic">Tickets gestionados en pipelines de soporte, excluyendo flujos de chat/llamada de Lucía (medidos en tablero aparte)</div>
 
   <div id="rangeBar"></div>
 
@@ -182,17 +183,10 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
   <div class="section-label">Evolución</div>
   <div class="section-title">¿Cómo se ha movido la demanda y el tiempo de cierre?</div>
 
-  <div class="chart-grid-3" style="margin-bottom:0">
-    <div class="chart-card">
-      <div class="chart-card-title">Volumen mensual</div>
-      <div class="chart-card-sub">Tickets creados por mes</div>
-      <div class="chart-wrap"><canvas id="chartWeekly"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-card-title">Distribución CSAT</div>
-      <div class="chart-card-sub" id="csatSub"></div>
-      <div class="chart-wrap"><canvas id="chartCsat"></canvas></div>
-    </div>
+  <div class="chart-card" style="margin-bottom:0">
+    <div class="chart-card-title">Volumen mensual</div>
+    <div class="chart-card-sub">Tickets creados por mes</div>
+    <div class="chart-wrap"><canvas id="chartWeekly"></canvas></div>
   </div>
 
   <div class="chart-grid-2" style="margin-top:16px">
@@ -212,6 +206,17 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     <div class="chart-card-title">Distribución del tiempo de cierre</div>
     <div class="chart-card-sub">Cuántos tickets se cierran en cada rango de días — la cola larga que el promedio esconde</div>
     <div class="chart-wrap" style="height:200px"><canvas id="chartHistograma"></canvas></div>
+  </div>
+
+  <hr class="section-divider">
+
+  <!-- ── SECCIÓN CSAT: CALIDAD DE LA EXPERIENCIA ── -->
+  <div class="section-label">Calidad</div>
+  <div class="section-title">Calidad de la experiencia</div>
+  <div class="section-sub" id="csatSub"></div>
+
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-wrap" style="height:320px"><canvas id="chartCsat"></canvas></div>
   </div>
 
   <hr class="section-divider">
