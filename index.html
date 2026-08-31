@@ -195,29 +195,48 @@ tbody td { padding: 9px 14px; color: var(--slate); white-space: nowrap; }
     </div>
   </div>
 
+  <div class="chart-grid-2" style="margin-top:16px">
+    <div class="chart-card">
+      <div class="chart-card-title">Creados vs Cerrados</div>
+      <div class="chart-card-sub">Detecta backlog: si Cerrados cae por debajo de Creados, se acumulan tickets abiertos</div>
+      <div class="chart-wrap"><canvas id="chartCreadosCerrados"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title">Tiempo a primera respuesta</div>
+      <div class="chart-card-sub">Promedio de horas hasta la primera respuesta del agente, por mes</div>
+      <div class="chart-wrap"><canvas id="chartPrimeraRespuesta"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-top:16px">
+    <div class="chart-card-title">Distribución del tiempo de cierre</div>
+    <div class="chart-card-sub">Cuántos tickets se cierran en cada rango de días — la cola larga que el promedio esconde</div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chartHistograma"></canvas></div>
+  </div>
+
   <hr class="section-divider">
 
   <!-- ── SECCIÓN 3: VERSIÓN ── -->
   <div class="section-label">Distribución</div>
-  <div class="section-title">Tickets por versión</div>
-  <div class="section-sub">Volumen y horas de cierre por versión, actualizado en vivo</div>
+  <div class="section-title">Tickets por país</div>
+  <div class="section-sub">Volumen por país, ordenado de mayor a menor — actualizado en vivo</div>
 
-  <div style="margin-bottom:20px">
-    <div class="table-card" style="box-shadow:none;border:1px solid #EDF1F5;margin-bottom:0">
-      <div class="table-header">
-        <div>
-          <h3>Detalle por versión</h3>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Versión</th><th>Tickets</th><th>% del total</th></tr></thead>
-          <tbody id="versionTableBody"></tbody>
-        </table>
-      </div>
-    </div>
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-wrap" style="height:360px"><canvas id="chartVersion"></canvas></div>
   </div>
 
+
+  <hr class="section-divider">
+
+  <!-- ── SECCIÓN 4: AGENTES ── -->
+  <div class="section-label">Desempeño</div>
+  <div class="section-title">Variación de desempeño por agente</div>
+  <div class="section-sub" id="agentesSub">78 agentes · ≥100 tickets · 2026</div>
+
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-card-sub">Eje X: volumen · Eje Y: % reopen · Tamaño del punto: tiempo de cierre promedio (días) · Estas líneas se cruzan en la media de todos los agentes</div>
+    <div class="chart-wrap" style="height:420px"><canvas id="chartAgentes"></canvas></div>
+  </div>
 
 </main>
 </div>
@@ -528,7 +547,11 @@ function render(data) {
   try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
   try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
   try { renderCsat(data.kpis?.csat); } catch (e) { console.error('Error en renderCsat:', e); }
-  try { renderVersion(data.por_version); } catch (e) { console.error('Error en renderVersion:', e); }
+  try { renderVersionChart(data.por_version); } catch (e) { console.error('Error en renderVersionChart:', e); }
+  try { renderCreadosCerrados(data.creados_vs_cerrados); } catch (e) { console.error('Error en renderCreadosCerrados:', e); }
+  try { renderPrimeraRespuesta(data.primera_respuesta); } catch (e) { console.error('Error en renderPrimeraRespuesta:', e); }
+  try { renderHistograma(data.histograma_cierre); } catch (e) { console.error('Error en renderHistograma:', e); }
+  try { renderAgentes(data.agentes); } catch (e) { console.error('Error en renderAgentes:', e); }
 }
 
 function renderKpis(k) {
@@ -617,14 +640,198 @@ function renderCsat(c) {
   });
 }
 
-function renderVersion(rows) {
-  if (!rows) return;
-  const tbody = document.getElementById('versionTableBody');
-  tbody.innerHTML = rows.map(r => {
-    const versionCell = r.version === 'Sin versión' ? `<span class="badge badge-gray">Sin versión</span>` : r.version;
-    return `<tr><td>${versionCell}</td><td>${fmt(r.tickets)}</td><td>${r.pct_total}%</td></tr>`;
-  }).join('');
+function renderVersionChart(rows) {
+  if (!rows || !rows.length) return;
+  // Pedido de Lauren (30-ago-2026): barras horizontales, de mayor a menor,
+  // con el % explícito sobre la barra y el nro. de tickets en el tooltip —
+  // igual que el gráfico de CSAT. "Versión" en HubSpot es en realidad país
+  // (ver MAPEO_CAMPOS_TABLA.md), por eso el label se recorta antes del " (".
+  const ordenado = [...rows].sort((a, b) => b.tickets - a.tickets);
+  const etiquetaPctVersion = {
+    id: 'etiquetaPctVersion',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.fillStyle = '#1A2B4A';
+      ctx.textAlign = 'left';
+      meta.data.forEach((bar, i) => {
+        ctx.fillText(ordenado[i].pct_total + '%', bar.x + 6, bar.y + 4);
+      });
+      ctx.restore();
+    },
+  };
+  safeChart('chartVersion', {
+    type: 'bar',
+    data: {
+      labels: ordenado.map(r => r.version === 'Sin versión' ? 'Sin versión' : r.version.split(' (')[0]),
+      datasets: [{ label: 'Tickets', data: ordenado.map(r => r.tickets), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 22 }],
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      layout: { padding: { right: 44 } },
+      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${fmt(ctx.parsed.x)} tickets (${ordenado[ctx.dataIndex].pct_total}%)` } },
+      },
+    },
+    plugins: [etiquetaPctVersion],
+  });
+}
 
+// Pedido de Lauren (30-ago-2026): Creados vs Cerrados por mes, para
+// detectar backlog (si Cerrados cae por debajo de Creados, se acumulan
+// tickets sin resolver). "Cerrados" acá es por closed_date real del mes,
+// no por la cohorte de createdate — distinto del "cerrados" del KPI de FCR.
+function renderCreadosCerrados(d) {
+  if (!d) return;
+  safeChart('chartCreadosCerrados', {
+    data: {
+      labels: d.meses.map(etiquetaMes),
+      datasets: [
+        { type: 'line', label: 'Creados', data: d.creados, borderColor: '#3B82F6', backgroundColor: '#3B82F6', tension: 0.25, pointRadius: 3 },
+        { type: 'line', label: 'Cerrados', data: d.cerrados, borderColor: '#00BFA5', backgroundColor: '#00BFA5', tension: 0.25, pointRadius: 3 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: { y: { grid: { color: '#F0F4F8' }, title: { display: true, text: 'Tickets', font: { size: 10 } } }, x: { grid: { display: false } } },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+    },
+  });
+}
+
+function renderPrimeraRespuesta(d) {
+  if (!d) return;
+  safeChart('chartPrimeraRespuesta', {
+    data: {
+      labels: d.meses.map(etiquetaMes),
+      datasets: [
+        { type: 'line', label: 'Horas a primera respuesta', data: d.horas, borderColor: '#8B5CF6', backgroundColor: '#8B5CF6', tension: 0.25, pointRadius: 3, fill: false },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: { y: { grid: { color: '#F0F4F8' }, title: { display: true, text: 'Horas', font: { size: 10 } } }, x: { grid: { display: false } } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+// Histograma en barras horizontales (pedido de Lauren) — sobre el corte
+// completo ene-ago 2026, todavía no varía con el filtro de período (ver
+// nota HARDCODE_TEMPORAL en lib/metrics.mjs).
+function renderHistograma(h) {
+  if (!h) return;
+  const buckets = [
+    { label: '< 1 día', v: h.menos_1 },
+    { label: '1–3 días', v: h.de_1_a_3 },
+    { label: '3–7 días', v: h.de_3_a_7 },
+    { label: '7–14 días', v: h.de_7_a_14 },
+    { label: '14–30 días', v: h.de_14_a_30 },
+    { label: '30+ días', v: h.mas_30 },
+  ];
+  safeChart('chartHistograma', {
+    type: 'bar',
+    data: {
+      labels: buckets.map(b => b.label),
+      datasets: [{ label: 'Tickets', data: buckets.map(b => b.v), backgroundColor: '#00BFA5', borderRadius: 4, maxBarThickness: 26 }],
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+// Scatter "Variación de desempeño por agente" (pedido de Lauren). OJO:
+// reopens acá usa la definición de Estefanía ('Nueva consulta' únicamente
+// en cualquiera de las dos propiedades) — NO se agregó 'Ambiguo' como en la
+// consulta que mandó Lauren, para no contradecir el KPI de reopen ya
+// validado (ver MAPEO_CAMPOS_TABLA.md).
+function clasificarAgente(a, medVol, medReopen) {
+  if (a.volumen >= medVol && a.reopen_pct < medReopen) return { seg: 'Motores', color: '#22C55E' };
+  if (a.volumen < medVol && a.reopen_pct < medReopen) return { seg: 'Resuelven', color: '#3B82F6' };
+  if (a.volumen >= medVol && a.reopen_pct >= medReopen) return { seg: 'Apurados', color: '#F5A623' };
+  return { seg: 'Problemas', color: '#EF4444' };
+}
+
+function renderAgentes(agentes) {
+  if (!agentes || !agentes.length) return;
+  const totalVol = agentes.reduce((a, b) => a + b.volumen, 0);
+  const totalReopens = agentes.reduce((a, b) => a + b.reopens, 0);
+  const medVol = totalVol / agentes.length;
+  const medReopen = totalVol ? (totalReopens / totalVol) * 100 : 0;
+
+  const subEl = document.getElementById('agentesSub');
+  if (subEl) {
+    subEl.textContent = `${agentes.length} agentes · ≥100 tickets · 2026 · línea de volumen ≈ ${fmt(Math.round(medVol))} · línea de reopen ≈ ${medReopen.toFixed(1)}%`;
+  }
+
+  const puntos = agentes.map(a => {
+    const { seg, color } = clasificarAgente(a, medVol, medReopen);
+    return { x: a.volumen, y: a.reopen_pct, r: Math.min(20, Math.max(5, a.ttc_dias)), nombre: a.nombre, ttc: a.ttc_dias, reopens: a.reopens, seg, color };
+  });
+
+  const porSegmento = {};
+  puntos.forEach(p => { (porSegmento[p.seg] = porSegmento[p.seg] || []).push(p); });
+
+  const nombresSeg = { Motores: '🏆 Motores', Resuelven: '✅ Resuelven', Apurados: '⚠️ Apurados', Problemas: '❌ Problemas' };
+  const ordenSeg = ['Motores', 'Resuelven', 'Apurados', 'Problemas'];
+  const datasets = ordenSeg.filter(seg => porSegmento[seg]).map(seg => ({
+    label: nombresSeg[seg],
+    data: porSegmento[seg],
+    backgroundColor: porSegmento[seg][0].color + 'CC',
+    borderColor: porSegmento[seg][0].color,
+  }));
+
+  const lineasMedia = {
+    id: 'lineasMedia',
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      const xPix = scales.x.getPixelForValue(medVol);
+      const yPix = scales.y.getPixelForValue(medReopen);
+      ctx.save();
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(xPix, chartArea.top);
+      ctx.lineTo(xPix, chartArea.bottom);
+      ctx.moveTo(chartArea.left, yPix);
+      ctx.lineTo(chartArea.right, yPix);
+      ctx.stroke();
+      ctx.restore();
+    },
+  };
+
+  safeChart('chartAgentes', {
+    type: 'bubble',
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: 'Volumen (tickets)', font: { size: 10 } }, grid: { color: '#F0F4F8' } },
+        y: { title: { display: true, text: '% Reopen', font: { size: 10 } }, grid: { color: '#F0F4F8' } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const p = ctx.raw;
+              return `${p.nombre}: ${fmt(p.x)} tickets, ${p.y.toFixed(1)}% reopen (${p.reopens}), ${p.ttc.toFixed(1)}d cierre`;
+            },
+          },
+        },
+      },
+    },
+    plugins: [lineasMedia],
+  });
 }
 </script>
 
