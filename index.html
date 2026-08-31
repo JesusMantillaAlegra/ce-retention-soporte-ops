@@ -573,6 +573,10 @@ function renderKpis(k) {
 
 const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const etiquetaMes = (iso) => {
+  // Con un solo mes filtrado, "Creados vs Cerrados" y "Tiempo a primera
+  // respuesta" usan bloques de 5 días ("1-5", "6-10", ...) en vez de meses
+  // ISO — se muestran tal cual, sin intentar parsearlos como fecha.
+  if (!/^\d{4}-\d{2}/.test(iso)) return iso;
   const [y, m] = iso.split('-');
   return `${MESES_CORTO[Number(m) - 1]} ${y}`;
 };
