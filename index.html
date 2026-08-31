@@ -565,7 +565,7 @@ function renderKpis(k) {
     { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox' },
     { label: 'Tiempo de cierre promedio', value: fmtDuracion(k.tiempo_cierre_horas?.valor), vcls: 'v-teal', icon: 'clock' },
     { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat' },
-    { label: 'FCR (no re-open)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
+    { label: 'Tasa de No Re-open', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
     { label: 'CSAT', value: (k.csat?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
@@ -772,6 +772,25 @@ function renderHistograma(h) {
     { label: '14–30 días', v: h.de_14_a_30 },
     { label: '30+ días', v: h.mas_30 },
   ];
+  const totalHist = buckets.reduce((a, b) => a + (b.v || 0), 0) || 1;
+  const pctHist = (v) => ((v / totalHist) * 100).toFixed(1) + '%';
+  // % fijo al final de cada barra (pedido de Lauren 31-ago-2026) — no un conteo en
+  // crudo dentro de la barra, ese sigue solo en el tooltip al pasar el mouse.
+  const etiquetaPctHist = {
+    id: 'etiquetaPctHist',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = '700 11px system-ui, sans-serif';
+      ctx.fillStyle = '#1A2B4A';
+      ctx.textAlign = 'left';
+      meta.data.forEach((bar, i) => {
+        ctx.fillText(pctHist(buckets[i].v), bar.x + 6, bar.y + 4);
+      });
+      ctx.restore();
+    },
+  };
   safeChart('chartHistograma', {
     type: 'bar',
     data: {
@@ -781,9 +800,14 @@ function renderHistograma(h) {
     options: {
       indexAxis: 'y',
       maintainAspectRatio: false,
+      layout: { padding: { right: 40 } },
       scales: { x: { grid: { color: '#F0F4F8' } }, y: { grid: { display: false } } },
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x.toLocaleString('es-CO')} tickets (${pctHist(ctx.parsed.x)})` } },
+      },
     },
+    plugins: [etiquetaPctHist],
   });
 }
 
