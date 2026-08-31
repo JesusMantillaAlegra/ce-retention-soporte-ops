@@ -565,7 +565,7 @@ function renderKpis(k) {
     { label: 'Volumen de tickets', value: fmt(k.volumen?.valor), vcls: 'v-dark', icon: 'inbox' },
     { label: 'Tiempo de cierre promedio', value: fmtDuracion(k.tiempo_cierre_horas?.valor), vcls: 'v-teal', icon: 'clock' },
     { label: 'Reopen rate', value: (k.reopen?.valor_pct ?? '—') + '%', vcls: 'v-amber', icon: 'repeat' },
-    { label: 'FCR (1er contacto)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
+    { label: 'FCR (no re-open)', value: (k.fcr?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'target' },
     { label: 'CSAT', value: (k.csat?.valor_pct ?? '—') + '%', vcls: 'v-green', icon: 'smile' },
   ];
   document.getElementById('kpiStrip').innerHTML = cards.map(c => `
