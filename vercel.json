@@ -5,10 +5,5 @@
       "path": "/api/snapshot",
       "schedule": "30 13 * * 3"
     }
-  ],
-  "functions": {
-    "api/metrics.mjs": { "maxDuration": 300 },
-    "api/snapshot.mjs": { "maxDuration": 300 },
-    "api/diagnostico.mjs": { "maxDuration": 60 }
-  }
+  ]
 }
