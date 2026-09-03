@@ -550,7 +550,7 @@ function render(data) {
     `Reopen, FCR y tiempos de cierre — complementa CSAT / SLA / demanda ya existentes · Período ${data.meta?.periodo?.label ?? ''}`;
 
   try { renderKpis(data.kpis); } catch (e) { console.error('Error en renderKpis:', e); }
-  try { renderWeekly(data.tendencia_semanal); } catch (e) { console.error('Error en renderWeekly:', e); }
+  try { renderWeekly(data.tendencia_semanal, data.meta?.periodo); } catch (e) { console.error('Error en renderWeekly:', e); }
   try { renderCsat(data.kpis?.csat); } catch (e) { console.error('Error en renderCsat:', e); }
   try { renderVersionChart(data.por_version); } catch (e) { console.error('Error en renderVersionChart:', e); }
   try { renderCreadosCerrados(data.creados_vs_cerrados); } catch (e) { console.error('Error en renderCreadosCerrados:', e); }
@@ -586,13 +586,61 @@ const etiquetaMes = (iso) => {
   return `${MESES_CORTO[Number(m) - 1]} ${y}`;
 };
 
-function renderWeekly(t) {
+// tendencia_semanal manda una clave por SEMANA (el lunes, 'YYYY-MM-DD') --
+// antes se etiquetaba con etiquetaMes(), que solo mira año-mes y por eso
+// las 4-5 semanas de un mismo mes salían con la etiqueta repetida (se veía
+// como un eje roto). Acá se muestra el rango real de días de esa semana
+// (lunes a domingo), partiendo el mes si la semana lo cruza.
+const etiquetaSemana = (iso) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const inicio = new Date(`${iso}T00:00:00Z`);
+  const fin = new Date(inicio);
+  fin.setUTCDate(fin.getUTCDate() + 6);
+  const dIni = inicio.getUTCDate();
+  const dFin = fin.getUTCDate();
+  const mIni = MESES_CORTO[inicio.getUTCMonth()];
+  const mFin = MESES_CORTO[fin.getUTCMonth()];
+  return mIni === mFin ? `${dIni}-${dFin} ${mIni}` : `${dIni} ${mIni}-${dFin} ${mFin}`;
+};
+
+// Con más de un mes en el rango (vista de año completo, o cualquier rango
+// multi-mes), esta gráfica suma las semanas de tendencia_semanal en un solo
+// punto por mes calendario -- si no, salían 4-5 barras por mes todas
+// pegadas. Con un solo mes filtrado se deja la semana tal cual (con su
+// rango de días real, ver etiquetaSemana). El promedio de cierre se
+// recalcula desde los crudos (suma_horas / n_cierre), no promediando los
+// promedios semanales, para que sea exacto.
+function agruparSemanasPorMes(t) {
+  const acc = new Map();
+  t.weeks.forEach((semana, i) => {
+    const mes = semana.slice(0, 7);
+    if (!acc.has(mes)) acc.set(mes, { volumen: 0, sumaHoras: 0, nCierre: 0 });
+    const f = acc.get(mes);
+    f.volumen += t.volumes[i] || 0;
+    f.sumaHoras += t.suma_horas?.[i] || 0;
+    f.nCierre += t.n_cierre?.[i] || 0;
+  });
+  const meses = [...acc.keys()].sort();
+  return {
+    weeks: meses,
+    volumes: meses.map((m) => acc.get(m).volumen),
+    close_hours: meses.map((m) => {
+      const f = acc.get(m);
+      return f.nCierre ? Number((f.sumaHoras / f.nCierre).toFixed(1)) : 0;
+    }),
+  };
+}
+
+function renderWeekly(t, periodo) {
   if (!t) return;
-  // El último mes del corte siempre está en progreso (no ha cerrado aún),
+  const unSoloMes = !!(periodo?.inicio && periodo?.fin && periodo.inicio.slice(0, 7) === periodo.fin.slice(0, 7));
+  const datos = unSoloMes ? t : agruparSemanasPorMes(t);
+  const etiquetar = unSoloMes ? etiquetaSemana : etiquetaMes;
+  // El último punto del corte siempre está en progreso (no ha cerrado aún),
   // así que se pinta gris salvo que el backend indique otro índice.
-  const censuredFrom = t.censured_from_index ?? (t.volumes.length - 1);
-  const barColors = t.volumes.map((_, i) => i >= censuredFrom ? '#CBD5E1' : '#00BFA5');
-  const closeDays = (t.close_hours || []).map(h => typeof h === 'number' ? h / 24 : null);
+  const censuredFrom = t.censured_from_index ?? (datos.volumes.length - 1);
+  const barColors = datos.volumes.map((_, i) => i >= censuredFrom ? '#CBD5E1' : '#00BFA5');
+  const closeDays = (datos.close_hours || []).map(h => typeof h === 'number' ? h / 24 : null);
 
   // Plugin liviano para mostrar el valor (en días) sobre cada punto de la
   // línea de tiempo de cierre, siempre visible y no solo al pasar el mouse.
@@ -616,9 +664,9 @@ function renderWeekly(t) {
 
   safeChart('chartWeekly', {
     data: {
-      labels: t.weeks.map(etiquetaMes),
+      labels: datos.weeks.map(etiquetar),
       datasets: [
-        { type: 'bar', label: 'Tickets creados', data: t.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22, order: 1 },
+        { type: 'bar', label: 'Tickets creados', data: datos.volumes, backgroundColor: barColors, yAxisID: 'y', borderRadius: 4, maxBarThickness: 22, order: 1 },
         { type: 'line', label: 'Tiempo de cierre promedio (días)', data: closeDays, yAxisID: 'y1', borderColor: '#111827', backgroundColor: '#111827', borderWidth: 2, pointRadius: 7, pointHoverRadius: 8, pointStyle: 'circle', pointBackgroundColor: '#111827', pointBorderColor: 'transparent', pointBorderWidth: 0, tension: 0.2, order: 0 },
       ],
     },
