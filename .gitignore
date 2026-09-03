@@ -13,3 +13,5 @@ node_modules/
 # Vercel CLI (vinculación local del proyecto)
 .vercel/
 _to_delete/
+
+_local_test/

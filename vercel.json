@@ -4,6 +4,16 @@
     {
       "path": "/api/snapshot",
       "schedule": "30 13 * * 3"
+    },
+    {
+      "path": "/api/cubos-refrescar",
+      "schedule": "0 11 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/metrics.mjs": { "maxDuration": 60 },
+    "api/snapshot.mjs": { "maxDuration": 60 },
+    "api/diagnostico.mjs": { "maxDuration": 60 },
+    "api/cubos-refrescar.mjs": { "maxDuration": 300 }
+  }
 }
