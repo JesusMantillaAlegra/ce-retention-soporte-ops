@@ -24,11 +24,16 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   const checks = {};
-  const periodStart = inicioAnioActual();
-  const periodEnd = new Date().toISOString();
+  // ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD para acotar el chequeo de CSAT a un
+  // mes puntual -- fetchCsat() NO trocea por mes (a diferencia de las demás
+  // fetch*), así que sobre el año completo puede chocar con el límite de
+  // 10.000 resultados de la Search API. Sin parámetros, se prueba el año
+  // completo como antes.
+  const periodStart = req.query?.desde ? `${req.query.desde}T00:00:00.000Z` : inicioAnioActual();
+  const periodEnd = req.query?.hasta ? `${req.query.hasta}T23:59:59.999Z` : new Date().toISOString();
 
   // 1) ¿Están definidas las variables de entorno?
-  const requeridas = ['HUBSPOT_TOKEN', 'CRON_SECRET', 'HUBSPOT_CSAT_PROPERTY'];
+  const requeridas = ['HUBSPOT_TOKEN', 'CRON_SECRET', 'HUBSPOT_CSAT_PROPERTY_VAR'];
   const faltantes = requeridas.filter((v) => !process.env[v]);
   checks.variables_entorno = faltantes.length
     ? { estado: 'falla', detalle: `Faltan: ${faltantes.join(', ')}` }
