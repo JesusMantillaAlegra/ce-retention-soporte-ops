@@ -6,10 +6,14 @@
 // Lo dispara el cron diario de Vercel (ver vercel.json). También se puede
 // llamar a mano para forzar un refresco fuera de horario.
 //
-// Solo los meses "inestables" (mesEstable() en lib/cubos.mjs, ~60 días de
-// margen desde que terminó el mes) se vuelven a calcular en cada corrida;
-// los demás se leen del KV si ya existen, o se calculan una sola vez si
-// faltan (primer arranque / backfill del histórico).
+// Prioridad de cada corrida: primero los meses que TODAVÍA NO EXISTEN en
+// KV (backfill del histórico, sin importar si son estables o no); solo
+// con el tiempo que quede se refrescan los meses "inestables" que ya
+// existen (mesEstable() en lib/cubos.mjs, ~60 días de margen desde que
+// terminó el mes). Ojo con el orden: si un mes inestable se forzara
+// siempre primero, una corrida que ya lo tiene fresco puede terminar
+// recalculándolo de nuevo cada vez y no dejar tiempo para llenar los
+// meses viejos que todavía faltan (pasó en la primera prueba, 3-sep-2026).
 //
 // PRESUPUESTO DE TIEMPO (3-sep-2026): calcular un mes desde cero tarda
 // bastante (varias funciones paginando miles de tickets cada una), y las
@@ -29,6 +33,7 @@
 
 import { mesesEnRango } from '../lib/fechas.mjs';
 import { obtenerCubo, mesEstable } from '../lib/cubos.mjs';
+import { obtenerCubo as leerCuboKV } from '../lib/store.mjs';
 
 function inicioAnioActual() {
   return `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
@@ -71,20 +76,28 @@ export default async function handler(req, res) {
     }
   }
 
-  // Los inestables primero -- son los que más importa mantener al día en
-  // cada corrida diaria; si el presupuesto se agota, lo que queda afuera
-  // es backfill de meses viejos (que no cambian, no hay apuro).
-  const meses = [...todosLosMeses].sort((a, b) => (mesEstable(a.fin) ? 1 : 0) - (mesEstable(b.fin) ? 1 : 0));
+  // Chequeo barato (solo lecturas a KV, sin tocar HubSpot) para saber qué
+  // meses ya existen -- así el backfill de los que faltan manda primero.
+  const existentes = await Promise.all(todosLosMeses.map((mes) => leerCuboKV(mes.id)));
+  const faltantes = [];
+  const inestablesExistentes = [];
+  todosLosMeses.forEach((mes, i) => {
+    if (!existentes[i]) faltantes.push(mes);
+    else if (!mesEstable(mes.fin)) inestablesExistentes.push(mes);
+  });
+  const cola = [...faltantes, ...inestablesExistentes];
 
   const inicioCorrida = Date.now();
   const resultados = [];
   const pendientes = [];
 
-  for (const mes of meses) {
+  for (const mes of cola) {
     if (Date.now() - inicioCorrida > PRESUPUESTO_MS) {
       pendientes.push(mes.id);
       continue;
     }
+    // Si ya existe (viene de inestablesExistentes), forzar refresco; si no
+    // existía todavía (backfill), obtenerCubo lo calcula igual sin forzar.
     const forzar = !mesEstable(mes.fin);
     const inicioTarea = Date.now();
     try {
