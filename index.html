@@ -759,9 +759,8 @@ function renderPrimeraRespuesta(d) {
   });
 }
 
-// Histograma en barras horizontales (pedido de Lauren) — sobre el corte
-// completo ene-ago 2026, todavía no varía con el filtro de período (ver
-// nota HARDCODE_TEMPORAL en lib/metrics.mjs).
+// Histograma en barras horizontales (pedido de Lauren) — en vivo desde
+// HubSpot, varía con el filtro de período (lib/hubspot.mjs::fetchTiempoCierre).
 function renderHistograma(h) {
   if (!h) return;
   const buckets = [
