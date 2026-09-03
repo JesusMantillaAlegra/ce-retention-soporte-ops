@@ -15,14 +15,19 @@
 // recalculándolo de nuevo cada vez y no dejar tiempo para llenar los
 // meses viejos que todavía faltan (pasó en la primera prueba, 3-sep-2026).
 //
-// PRESUPUESTO DE TIEMPO (3-sep-2026): calcular un mes desde cero tarda
-// bastante (varias funciones paginando miles de tickets cada una), y las
-// funciones de Vercel tienen un límite de tiempo por invocación —el plan
-// del proyecto puede recortar el "maxDuration" pedido en vercel.json—.
-// Para no depender de adivinar ese límite, esta corrida se corta sola
-// bajo PRESUPUESTO_MS y devuelve qué meses le faltaron en "pendientes":
-// llamar al endpoint de nuevo retoma justo donde se quedó (los meses ya
-// calculados en esta corrida no se repiten).
+// PRESUPUESTO DE TIEMPO (3-sep-2026, ajustado tras la primera corrida real):
+// calcular un mes desde cero tarda bastante -- probado en vivo, agosto
+// tardó 122s. Se confirmó que la función SÍ aguanta el maxDuration:300 de
+// vercel.json (no se cortó), así que el presupuesto se sube a 240s para
+// dejar margen sin arriesgar el límite de 300s. Cuando el presupuesto no
+// alcanza para todos los meses, la corrida devuelve qué le faltó en
+// "pendientes": llamar al endpoint de nuevo retoma justo donde se quedó.
+//
+// Además (mismo hallazgo): un mes "inestable" ya NO se fuerza si se
+// recalculó hace menos de REFRESCO_MINIMO_HORAS -- sin esto, un backfill
+// de varias corridas quedaba dando vueltas: julio/septiembre se acababan
+// de recalcular, entraban de nuevo a la cola por ser inestables, y le
+// robaban el turno a los meses viejos que todavía faltaban.
 //
 // ?mes=YYYY-MM fuerza el recálculo de UN mes puntual (sin importar si es
 // estable), ignorando el presupuesto -- para pedir a mano el rehágo de un
@@ -39,7 +44,8 @@ function inicioAnioActual() {
   return `${new Date().getUTCFullYear()}-01-01T00:00:00.000Z`;
 }
 
-const PRESUPUESTO_MS = 45_000; // deja margen bajo cualquier límite razonable (Hobby: 60s)
+const PRESUPUESTO_MS = 240_000; // margen bajo el maxDuration:300 de vercel.json
+const REFRESCO_MINIMO_HORAS = 6; // no forzar un mes inestable si ya se calculó hace menos de esto
 
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
@@ -82,8 +88,14 @@ export default async function handler(req, res) {
   const faltantes = [];
   const inestablesExistentes = [];
   todosLosMeses.forEach((mes, i) => {
-    if (!existentes[i]) faltantes.push(mes);
-    else if (!mesEstable(mes.fin)) inestablesExistentes.push(mes);
+    const cubo = existentes[i];
+    if (!cubo) {
+      faltantes.push(mes);
+      return;
+    }
+    if (mesEstable(mes.fin)) return; // ya existe y no va a cambiar más: nada que hacer
+    const horasDesdeCalculo = (Date.now() - new Date(cubo.calculado_en).getTime()) / 3_600_000;
+    if (horasDesdeCalculo >= REFRESCO_MINIMO_HORAS) inestablesExistentes.push(mes);
   });
   const cola = [...faltantes, ...inestablesExistentes];
 
