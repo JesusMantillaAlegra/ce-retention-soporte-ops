@@ -610,10 +610,32 @@ const etiquetaSemana = (iso) => {
 // rango de días real, ver etiquetaSemana). El promedio de cierre se
 // recalcula desde los crudos (suma_horas / n_cierre), no promediando los
 // promedios semanales, para que sea exacto.
+// A qué mes calendario pertenece una semana (lunes a domingo): el mes donde
+// caen la MAYORÍA de sus 7 días, no el mes de su lunes. Sin esto, la semana
+// en curso quedaba pegada al mes anterior hasta que llegaba un lunes nuevo
+// -- ej. el 5-sep, la semana del lunes 31-ago (6 de sus 7 días ya en
+// septiembre) se seguía sumando dentro de "ago 2026" y septiembre no
+// aparecía como barra propia.
+function mesMayoritario(semanaInicioISO) {
+  const inicio = new Date(`${semanaInicioISO}T00:00:00Z`);
+  const conteo = new Map();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(inicio);
+    d.setUTCDate(d.getUTCDate() + i);
+    const mes = d.toISOString().slice(0, 7);
+    conteo.set(mes, (conteo.get(mes) || 0) + 1);
+  }
+  let mejor = null, max = -1;
+  for (const [mes, n] of conteo) {
+    if (n > max) { max = n; mejor = mes; }
+  }
+  return mejor;
+}
+
 function agruparSemanasPorMes(t) {
   const acc = new Map();
   t.weeks.forEach((semana, i) => {
-    const mes = semana.slice(0, 7);
+    const mes = mesMayoritario(semana);
     if (!acc.has(mes)) acc.set(mes, { volumen: 0, sumaHoras: 0, nCierre: 0 });
     const f = acc.get(mes);
     f.volumen += t.volumes[i] || 0;
