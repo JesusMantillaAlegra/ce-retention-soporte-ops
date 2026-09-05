@@ -692,7 +692,7 @@ function renderCsat(c) {
   // (pedido explícito de Lauren — no alfabético, no por tamaño de barra).
   const total = c.total_respuestas || (c.detractor + c.passive + c.promoter) || 0;
   const valores = [c.detractor, c.passive, c.promoter];
-  const pctBarra = (v) => total ? ((v / total) * 100).toFixed(1) + '%' : '—';
+  const pctBarra = (v) => fmt(v);
   // Plugin liviano (sin librería externa) para dibujar el % encima de cada
   // barra, siempre visible y no solo al pasar el mouse.
   const etiquetaPct = {
