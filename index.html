@@ -631,15 +631,51 @@ function agruparSemanasPorMes(t) {
   };
 }
 
+// Último día real del período que identifica esta barra -- 'clave' es un
+// mes calendario ('YYYY-MM', vista de año completo) o el lunes de una
+// semana ('YYYY-MM-DD', vista de un solo mes).
+function finDePeriodo(clave) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clave)) {
+    const inicio = new Date(`${clave}T00:00:00Z`);
+    const fin = new Date(inicio);
+    fin.setUTCDate(fin.getUTCDate() + 6);
+    return fin;
+  }
+  const [y, m] = clave.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)); // día 0 del mes siguiente = último día de 'clave'
+}
+
+// Mismo umbral que MES_ESTABLE_DIAS en lib/cubos.mjs: pasados 60 días desde
+// que terminó, un período ya no cambia (los tickets casi nunca reabren tan
+// tarde) y el backend deja de recalcularlo -- por eso acá también se pinta
+// como definitivo a partir de ahí.
+const PERIODO_ESTABLE_DIAS = 60;
+
+// Antes se pintaba gris solo la última barra del gráfico, asumiendo que
+// siempre era el período "en curso" -- pero la última semana del corte
+// (lunes a domingo) puede seguir agrupada dentro del mes anterior si el mes
+// siguiente todavía no tiene ni una semana completa, y entonces un mes ya
+// terminado (ej. agosto) salía pintado como si siguiera abierto. Ahora se
+// compara la fecha real de fin de cada barra contra hoy:
+//   - todavía no termina -> gris (en curso, datos parciales)
+//   - terminó hace menos de 60 días -> amarillo (puede cambiar: tickets
+//     creados ahí que todavía no cerraron, o encuestas CSAT tardías)
+//   - terminó hace 60+ días -> verde (ya no cambia)
+function colorBarra(clave) {
+  const fin = finDePeriodo(clave);
+  const hoy = new Date();
+  hoy.setUTCHours(0, 0, 0, 0);
+  if (fin >= hoy) return '#CBD5E1';
+  const diasDesde = (hoy - fin) / 86400000;
+  return diasDesde < PERIODO_ESTABLE_DIAS ? '#F5B942' : '#00BFA5';
+}
+
 function renderWeekly(t, periodo) {
   if (!t) return;
   const unSoloMes = !!(periodo?.inicio && periodo?.fin && periodo.inicio.slice(0, 7) === periodo.fin.slice(0, 7));
   const datos = unSoloMes ? t : agruparSemanasPorMes(t);
   const etiquetar = unSoloMes ? etiquetaSemana : etiquetaMes;
-  // El último punto del corte siempre está en progreso (no ha cerrado aún),
-  // así que se pinta gris salvo que el backend indique otro índice.
-  const censuredFrom = t.censured_from_index ?? (datos.volumes.length - 1);
-  const barColors = datos.volumes.map((_, i) => i >= censuredFrom ? '#CBD5E1' : '#00BFA5');
+  const barColors = datos.weeks.map(colorBarra);
   const closeDays = (datos.close_hours || []).map(h => typeof h === 'number' ? h / 24 : null);
 
   // Plugin liviano para mostrar el valor (en días) sobre cada punto de la
