@@ -15,3 +15,5 @@ node_modules/
 _to_delete/
 
 _local_test/
+diag_csat_bisect.mjs
+verif_csat.mjs
